@@ -37,6 +37,7 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
     if (vertical):
         pass
         bgr_cap = cv2.rotate(bgr_cap, cv2.ROTATE_90_CLOCKWISE)
+    print("image shape", bgr_cap.shape)
     cv2.imwrite(name+"_bgr.png", bgr_cap)
     # Check if camera opened successfully
     if (not cap.isOpened()):
@@ -51,7 +52,7 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
     # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
     outvideo = cv2.VideoWriter(name + '.avi', cv2.VideoWriter_fourcc(
         *'MPEG'), int(cap.get(cv2.CAP_PROP_FPS)), (frame_width, frame_height))    
-    buf = np.zeros((1920, 1080, 3), dtype='uint8')
+    buf = np.zeros((frame_height, frame_width, 3), dtype='uint8')
 
     while(True):
         ret1, frame1 = cap.read()
@@ -63,6 +64,7 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
             # Processing starts
             res1 = computeDepth(model, transform, frame1)
             # print(frame1.shape)
+            # print(res1.shape)
             with np.nditer(res1, op_flags=['readwrite']) as it:
                 for x in it:
                     x[...] = 1 if x > threshold else 0
