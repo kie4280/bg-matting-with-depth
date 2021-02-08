@@ -14,14 +14,17 @@ from MiDaS.midas.midas_net import MidasNet
 from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
-model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
-test_data_path = "/kaggle/input/matting-test-video/personal data/"
+# model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
+# test_data_path = "/kaggle/input/matting-test-video/personal data/"
+model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
+test_data_path = "/home/kie/Downloads/personal data/"
 
 video_list_h = []
 video_list_v = ["close"]
 
 threshold = 100
 device = None
+
 
 def concat(video_path, bgr_path, name="output", vertical: bool = False):
 
@@ -30,7 +33,10 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
     # Create a VideoCapture object
     cap = cv2.VideoCapture(video_path)
     bgr_cap = cv2.imread(bgr_path)
-    
+    if (vertical):
+        pass
+        bgr_cap = cv2.rotate(bgr_cap, cv2.ROTATE_90_CLOCKWISE)
+
     # Check if camera opened successfully
     if (not cap.isOpened()):
         print("Unable to read camera feed")
@@ -44,7 +50,7 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
     # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
     out = cv2.VideoWriter(name + '.avi', cv2.VideoWriter_fourcc(
         *'MPEG'), int(cap.get(cv2.CAP_PROP_FPS)), (frame_width, frame_height))
-    buf = np.zeros((1920,1080, 3), dtype='uint8')
+    buf = np.zeros((1920, 1080, 3), dtype='uint8')
 
     while(True):
         ret1, frame1 = cap.read()
@@ -54,22 +60,23 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
         else:
             if (vertical):
                 pass
-                # frame1 = cv2.rotate(frame1, cv2.ROTATE_90_CLOCKWISE)
+                #frame1 = cv2.rotate(frame1, cv2.ROTATE_90_CLOCKWISE)
                 # print("vertical")
-            # print(frame.shape)
+            # print(bgr_cap.shape)
 
-        # Processing starts
-        res1 = computeDepth(model, transform, frame1)
-        print(frame1.shape)
-        with np.nditer(res1, op_flags=['readwrite']) as it:
-            for x in it:
-                x[...] = 1 if x > threshold else 0
+            # Processing starts
+            res1 = computeDepth(model, transform, frame1)
+            # print(frame1.shape)
+            with np.nditer(res1, op_flags=['readwrite']) as it:
+                for x in it:
+                    x[...] = 1 if x > threshold else 0
 
-        for i in range(3):
-            buf[:,:,i] = (res1 * frame1[:,:,i]) + bgr_cap[:,:,i] - (res1 * bgr_cap[:,:,i])
-        out.write(buf)
-        # cv2.imshow('frame',buf)
-        # cv2.waitKey(100)
+            for i in range(3):
+                buf[:, :, i] = (res1 * frame1[:, :, i]) + \
+                    bgr_cap[:, :, i] - (res1 * bgr_cap[:, :, i])
+            out.write(buf)
+            # cv2.imshow('frame',buf)
+            # cv2.waitKey(100)
 
     # When everything done, release the video capture and video write objects
     cap.release()
@@ -184,7 +191,7 @@ def computeDepth(model, transform, img, optimize: bool = True):
             .numpy()
         )
     # output
-    
+
     output = write_depth(prediction, bits=1)
 
     print("finished")
