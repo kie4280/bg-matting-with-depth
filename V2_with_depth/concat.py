@@ -19,6 +19,7 @@ test_data_path = "/kaggle/input/matting-test-video/personal data/"
 # model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
 # test_data_path = "/home/kie/Downloads/personal data/"
 
+
 video_list_h = []
 video_list_v = ["close"]
 
