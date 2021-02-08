@@ -66,7 +66,7 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
                 x[...] = 1 if x > threshold else 0
 
         for i in range(3):
-            buf[:,:,i] = (res1 * frame1[:,:,i]) + bgr_cap - (res1 * bgr_cap[:,:,i])
+            buf[:,:,i] = (res1 * frame1[:,:,i]) + bgr_cap[:,:,i] - (res1 * bgr_cap[:,:,i])
         out.write(buf)
         # cv2.imshow('frame',buf)
         # cv2.waitKey(100)
