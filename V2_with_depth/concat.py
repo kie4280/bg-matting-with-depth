@@ -15,7 +15,7 @@ from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
-test_data_path = "/kaggle/input/matting-test-video/personal data"
+test_data_path = "/kaggle/input/matting-test-video/personal data/"
 
 video_list_h = []
 video_list_v = ["close"]
@@ -66,17 +66,17 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
                 x[...] = 1 if x > threshold else 0
 
         for i in range(3):
-            buf[:,:,i] = res1 * frame1[:,:,i]
+            buf[:,:,i] = (res1 * frame1[:,:,i]) + bgr_cap - (res1 * bgr_cap[:,:,i])
         out.write(buf)
-        cv2.imshow('frame',buf)
-        cv2.waitKey(100)
+        # cv2.imshow('frame',buf)
+        # cv2.waitKey(100)
 
     # When everything done, release the video capture and video write objects
     cap.release()
     out.release()
 
     # Closes all the frames
-    cv2.destroyAllWindows()
+    # cv2.destroyAllWindows()
 
 
 def initialize(model_path, optimize=True):
