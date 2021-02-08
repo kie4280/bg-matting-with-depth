@@ -14,10 +14,10 @@ from MiDaS.midas.midas_net import MidasNet
 from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
-# model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
-# test_data_path = "/kaggle/input/matting-test-video/personal data/"
-model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
-test_data_path = "/home/kie/Downloads/personal data/"
+model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
+test_data_path = "/kaggle/input/matting-test-video/personal data/"
+# model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
+# test_data_path = "/home/kie/Downloads/personal data/"
 
 
 video_list_h = ["far", "IMG_0156"]
