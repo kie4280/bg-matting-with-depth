@@ -14,16 +14,16 @@ from MiDaS.midas.midas_net import MidasNet
 from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
-model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
-test_data_path = "/kaggle/input/matting-test-video/personal data/"
-# model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
-# test_data_path = "/home/kie/Downloads/personal data/"
+# model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
+# test_data_path = "/kaggle/input/matting-test-video/personal data/"
+model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
+test_data_path = "/home/kie/Downloads/personal data/"
 
 
-video_list_h = []
-video_list_v = ["close"]
+video_list_h = ["far", "IMG_0156"]
+video_list_v = ["close", "court", "fast_moving", "IMG_0150", "IMG_0151", ]
 
-threshold = 100
+threshold = 80
 device = None
 
 
@@ -37,7 +37,7 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
     if (vertical):
         pass
         bgr_cap = cv2.rotate(bgr_cap, cv2.ROTATE_90_CLOCKWISE)
-
+    cv2.imwrite(name+"_bgr.png", bgr_cap)
     # Check if camera opened successfully
     if (not cap.isOpened()):
         print("Unable to read camera feed")
@@ -49,8 +49,8 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
     print("video shape", frame_width, frame_height)
 
     # Define the codec and create VideoWriter object.The output is stored in 'outpy.avi' file.
-    out = cv2.VideoWriter(name + '.avi', cv2.VideoWriter_fourcc(
-        *'MPEG'), int(cap.get(cv2.CAP_PROP_FPS)), (frame_width, frame_height))
+    outvideo = cv2.VideoWriter(name + '.avi', cv2.VideoWriter_fourcc(
+        *'MPEG'), int(cap.get(cv2.CAP_PROP_FPS)), (frame_width, frame_height))    
     buf = np.zeros((1920, 1080, 3), dtype='uint8')
 
     while(True):
@@ -59,11 +59,6 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
         if ret1 == False:
             break
         else:
-            if (vertical):
-                pass
-                #frame1 = cv2.rotate(frame1, cv2.ROTATE_90_CLOCKWISE)
-                # print("vertical")
-            # print(bgr_cap.shape)
 
             # Processing starts
             res1 = computeDepth(model, transform, frame1)
@@ -75,13 +70,13 @@ def concat(video_path, bgr_path, name="output", vertical: bool = False):
             for i in range(3):
                 buf[:, :, i] = (res1 * frame1[:, :, i]) + \
                     bgr_cap[:, :, i] - (res1 * bgr_cap[:, :, i])
-            out.write(buf)
+            outvideo.write(buf)
             # cv2.imshow('frame',buf)
             # cv2.waitKey(100)
 
     # When everything done, release the video capture and video write objects
     cap.release()
-    out.release()
+    outvideo.release()
 
     # Closes all the frames
     # cv2.destroyAllWindows()
@@ -123,6 +118,7 @@ def initialize(model_path, optimize=True):
             PrepareForNet(),
         ]
     )
+
 
     model.eval()
 
