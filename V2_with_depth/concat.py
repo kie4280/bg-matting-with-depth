@@ -14,16 +14,14 @@ from MiDaS.midas.midas_net import MidasNet
 from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
-model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
-test_data_path = "/kaggle/input/matting-test-video/personal data/"
-# model_path = "/home/kie/MyProjects/code/intel-model-f6b98070.pt"
-# test_data_path = "/home/kie/Downloads/personal data/"
+# model_path = "/kaggle/input/weights-for-v2-and-intel/intel-model-f6b98070.pt"
+# test_data_path = "/kaggle/input/matting-test-video/personal data/"
+model_path = "/home/kie/research/pretrained/intel-MiDas-model.pt"
+test_data_path = "/home/kie/personal_data"
 
-
-video_list_h = ["far", "IMG_0156"]
 video_list_v = ["close", "court", "fast_moving", "IMG_0150", "IMG_0151", ]
 
-threshold = 80
+threshold = 60
 device = None
 
 
@@ -210,11 +208,8 @@ def side_by_side(images: list):
 
 
 if (__name__ == "__main__"):
-    for i in video_list_h:
-        video_path = test_data_path + i + ".MOV"
-        bgr_path = test_data_path + i + "_bgr.png"
-        concat(video_path, bgr_path, i, False)
-    for i in video_list_v:
+    
+    for i in video_list:
         video_path = test_data_path + i + ".MOV"
         bgr_path = test_data_path + i + "_bgr.png"
         concat(video_path, bgr_path, i, True)

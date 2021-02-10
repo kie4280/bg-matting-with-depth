@@ -1,19 +1,3 @@
-"""
-Inference on webcams: Use a model on webcam input.
-
-Once launched, the script is in background collection mode.
-Press B to toggle between background capture mode and matting mode. The frame shown when B is pressed is used as background for matting.
-Press Q to exit.
-
-Example:
-
-    python inference_webcam.py \
-        --model-type mattingrefine \
-        --model-backbone resnet50 \
-        --model-checkpoint "PATH_TO_CHECKPOINT" \
-        --resolution 1280 720
-
-"""
 
 import argparse
 import os
@@ -36,15 +20,16 @@ from model import MattingBase, MattingRefine
 
 filename = "IMG_0150"
 video_format = "MOV"
+test_data_path = "/home/kie/personal_data"
 
 # --------------- Arguments ---------------
 
 
-parser = argparse.ArgumentParser(description='Inference from web-cam')
+parser = argparse.ArgumentParser(description='Inference from video')
 
-parser.add_argument('--model-type', type=str, required=True,
+parser.add_argument('--model-type', type=str, defautl="mattingrefine",
                     choices=['mattingbase', 'mattingrefine'])
-parser.add_argument('--model-backbone', type=str, required=True,
+parser.add_argument('--model-backbone', type=str, default="resnet50",
                     choices=['resnet101', 'resnet50', 'mobilenetv2'])
 parser.add_argument('--model-backbone-scale', type=float, default=0.25)
 parser.add_argument('--model-checkpoint', type=str, required=True)
@@ -55,8 +40,15 @@ parser.add_argument('--model-refine-threshold', type=float, default=0.7)
 
 parser.add_argument('--hide-fps', action='store_true')
 parser.add_argument('--resolution', type=int, nargs=2,
-                    metavar=('width', 'height'), default=(1280, 720))
+                    metavar=('width', 'height'), default=(1920, 1080))
 args = parser.parse_args()
+
+# ---------- Utility functions -----------
+
+
+def cv2_frame_to_cuda(frame):
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).cuda()
 
 
 # ----------- Utility classes -------------
@@ -65,9 +57,9 @@ args = parser.parse_args()
 # A wrapper that reads data from cv2.VideoCapture in its own thread to optimize.
 # Use .read() in a tight loop to get the newest frame
 class Camera:
-    def __init__(self, device_id="/home/kie/personal_data/{}.{}".format(filename, video_format), width=1280, height=720):
+    def __init__(self, device_id="/home/kie/personal_data/{}.{}".format(filename, video_format)):
         self.capture = cv2.VideoCapture(device_id)
-        if (not self.capture.isOpened()) :
+        if (not self.capture.isOpened()):
             print("cannot open input video")
             exit()
         # self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
@@ -82,7 +74,7 @@ class Camera:
         success, frame = self.capture.read()
         if (not success):
             return False, None
-        return success, frame.copy()
+        return success, frame
 
     def __exit__(self, exec_type, exc_value, traceback):
         self.capture.release()
@@ -131,52 +123,53 @@ class Displayer:
             cv2.putText(image, message, (10, 40),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0))
         self.videowriter.write(image)
-        return cv2.waitKey(1) & 0xFF
 
     def __exit__(self, exec_type, exc_value, traceback):
         self.videowriter.release()
 
+
+class BGv2:
+    # Load model
+
+    def __init__(self, args):
+        self.args = args
+        if args.model_type == 'mattingbase':
+            self.model = MattingBase(args.model_backbone)
+        if args.model_type == 'mattingrefine':
+            self.model = MattingRefine(
+                args.model_backbone,
+                args.model_backbone_scale,
+                args.model_refine_mode,
+                args.model_refine_sample_pixels,
+                args.model_refine_threshold)
+
+        self.model = self.model.cuda().eval()
+        self.model.load_state_dict(torch.load(
+            args.model_checkpoint), strict=False)
+        self.background = None
+
+    def set_bg(self, bgr):
+        self.background = cv2_frame_to_cuda(bgr)
+
+    def single_frame(self, frame):
+        with torch.no_grad():
+            if self.background is not None:  # matting
+                src = cv2_frame_to_cuda(frame)
+                pha, fgr = self.model(src, bgr)[:2]
+                res = pha * fgr + (1 - pha) * torch.ones_like(fgr)
+                res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
+                res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
+                return res
+
+        return None
+
+
 # --------------- Main ---------------
 
 
-# Load model
-if args.model_type == 'mattingbase':
-    model = MattingBase(args.model_backbone)
-if args.model_type == 'mattingrefine':
-    model = MattingRefine(
-        args.model_backbone,
-        args.model_backbone_scale,
-        args.model_refine_mode,
-        args.model_refine_sample_pixels,
-        args.model_refine_threshold)
-
-model = model.cuda().eval()
-model.load_state_dict(torch.load(args.model_checkpoint), strict=False)
-
-
-width, height = args.resolution
-cam = Camera(width=width, height=height)
+cam = Camera()
 dsp = Displayer(filename, cam.width, cam.height,
                 cam.fps, show_info=(not args.hide_fps))
 bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
 if (cam.width < cam.height):
     bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
-
-def cv2_frame_to_cuda(frame):
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    return ToTensor()(Image.fromarray(frame)).unsqueeze_(0).cuda()
-
-
-with torch.no_grad():
-    bgr = cv2_frame_to_cuda(bgr)
-    while True:  # matting
-        success, frame = cam.read()
-        if (not success):
-            break
-        src = cv2_frame_to_cuda(frame)
-        pha, fgr = model(src, bgr)[:2]
-        res = pha * fgr + (1 - pha) * torch.ones_like(fgr)
-        res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
-        res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
-        key = dsp.step(res)
-        
