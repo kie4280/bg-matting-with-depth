@@ -1,15 +1,23 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
-            "console": "integratedTerminal"
+            "program": "${workspaceFolder}/V2_with_depth/V2/inference_webcam_modify.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model-type",
+                "mattingrefine",
+                "--model-backbone",
+                "resnet50",
+                "--model-checkpoint",
+                "/home/kie/research/pretrained/V2-model.pth",
+                "--resolution",
+                "1280",
+                "720"
+            ]
         }
     ]
 }
