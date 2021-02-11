@@ -18,7 +18,7 @@ from dataset import VideoDataset
 from model import MattingBase, MattingRefine
 
 
-filename = "IMG_0150"
+filename = "fast_moving"
 video_format = "MOV"
 test_data_path = "/home/kie/personal_data"
 
@@ -27,7 +27,7 @@ test_data_path = "/home/kie/personal_data"
 
 parser = argparse.ArgumentParser(description='Inference from video')
 
-parser.add_argument('--model-type', type=str, defautl="mattingrefine",
+parser.add_argument('--model-type', type=str, default="mattingrefine",
                     choices=['mattingbase', 'mattingrefine'])
 parser.add_argument('--model-backbone', type=str, default="resnet50",
                     choices=['resnet101', 'resnet50', 'mobilenetv2'])
@@ -146,16 +146,16 @@ class BGv2:
         self.model = self.model.cuda().eval()
         self.model.load_state_dict(torch.load(
             args.model_checkpoint), strict=False)
-        self.background = None
+        self.__background = None
 
     def set_bg(self, bgr):
-        self.background = cv2_frame_to_cuda(bgr)
+        self.__background = cv2_frame_to_cuda(bgr)
 
     def single_frame(self, frame):
         with torch.no_grad():
-            if self.background is not None:  # matting
+            if self.__background is not None:  # matting
                 src = cv2_frame_to_cuda(frame)
-                pha, fgr = self.model(src, bgr)[:2]
+                pha, fgr = self.model(src, self.__background)[:2]
                 res = pha * fgr + (1 - pha) * torch.ones_like(fgr)
                 res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
                 res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
@@ -166,10 +166,20 @@ class BGv2:
 
 # --------------- Main ---------------
 
+if __name__ == "__main__":
 
-cam = Camera()
-dsp = Displayer(filename, cam.width, cam.height,
-                cam.fps, show_info=(not args.hide_fps))
-bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
-if (cam.width < cam.height):
-    bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+    cam = Camera()
+    dsp = Displayer(filename, cam.width, cam.height,
+                    cam.fps, show_info=(not args.hide_fps))
+    bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
+    if (cam.width < cam.height):
+        bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+    v = BGv2(args)
+    v.set_bg(bgr)
+    while True:
+        has_next, frame = cam.read()
+        if has_next is False:
+            break
+        frame = v.single_frame(frame)
+        dsp.step(frame)
+    
