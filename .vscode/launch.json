@@ -5,18 +5,15 @@
             "name": "Python: Current File",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/V2_with_depth/V2/inference_custom.py",
+            "program": "${workspaceFolder}/V2_with_depth/inference_custom.py",
             "console": "integratedTerminal",
             "args": [
-                "--model-type",
-                "mattingrefine",
-                "--model-backbone",
-                "resnet50",
-                "--model-checkpoint",
+                "--V2-model-checkpoint",
                 "/home/kie/research/pretrained/V2-model.pth",
-                "--resolution",
-                "1280",
-                "720"
+                "--Midas-model-checkpoint",
+                "/home/kie/research/pretrained/intel-MiDas-model-small.pt",
+                "--Midas-model-type",
+                "small"
             ]
         }
     ]
