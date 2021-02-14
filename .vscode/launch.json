@@ -2,10 +2,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
+            "name": "Python: inference",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/V2_with_depth/inference_custom.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--V2-model-checkpoint",
+                "/home/kie/research/pretrained/V2-model.pth",
+                "--Midas-model-checkpoint",
+                "/home/kie/research/pretrained/intel-MiDas-model.pt",
+                "--Midas-model-type",
+                "large"
+            ]
+        },
+        {
+            "name": "Python: inference old",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/V2_with_depth/inference_old.py",
             "console": "integratedTerminal",
             "args": [
                 "--V2-model-checkpoint",
