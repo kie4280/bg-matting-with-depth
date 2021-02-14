@@ -30,7 +30,7 @@ from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 from V2.model import MattingBase, MattingRefine
 
-filename = "fast_moving"
+filename = "far"
 video_format = "MOV"
 test_data_path = "/home/kie/personal_data"
 
@@ -48,9 +48,9 @@ parser.add_argument('--V2-model-checkpoint', type=str, required=True)
 
 parser.add_argument('--V2-model-refine-mode', type=str,
                     default='sampling', choices=['full', 'sampling', 'thresholding'])
-parser.add_argument('--V2-model-refine-sample-pixels', type=int, default=80_000)
+parser.add_argument('--V2-model-refine-sample-pixels',
+                    type=int, default=80_000)
 parser.add_argument('--V2-model-refine-threshold', type=float, default=0.7)
-
 
 
 parser.add_argument("--Midas-model-checkpoint", type=str, required=True)
@@ -236,18 +236,22 @@ class MidasSingle:
 
         self.model.to(self.device)
 
-    def single_frame(self, frame):
+    def single_frame(self, frame, bits=1) -> np.ndarray:
+        time1 = time.time()
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) / 255.0
         img_input = self.transform({"image": img})["image"]
         # compute
+        
         with torch.no_grad():
-            time1 = time.time()
+
             sample = torch.from_numpy(img_input).to(self.device).unsqueeze(0)
             if self.optimize == True and self.device == torch.device("cuda"):
                 sample = sample.to(memory_format=torch.channels_last)
                 sample = sample.half()
             prediction = self.model.forward(sample)
-           
+            torch.cuda.synchronize()
+            time1 = time.time() - time1
+            print(1.0/time1)
             prediction = (
                 torch.nn.functional.interpolate(
                     prediction.unsqueeze(1),
@@ -256,46 +260,23 @@ class MidasSingle:
                     align_corners=False,
                 )
                 .squeeze()
-                .cpu()
-                .numpy()
             )
             
+            max_T = torch.max(prediction)
+            min_T = torch.min(prediction)
             
-        # output
-        
-        output = self._write_depth(prediction, bits=1)
-        time1 = time.time() - time1
-        # print(1.0/time1)
+            max_val = (2**(8*bits))-1
+            prediction = (max_val / (max_T - min_T)) * (prediction - min_T)
 
-        return output
+            if bits == 1:
+                prediction = prediction.to(dtype=torch.uint8)
+            elif bits == 2:
+                prediction = prediction.to(dtype=torch.int32)
+            else:
+                raise RuntimeError("Invalid bits")
+       
+        return prediction
 
-    def _write_depth(self, depth, bits=1):
-        """Write depth map to pfm and png file.
-
-        Args:
-            path (str): filepath without extension
-            depth (array): depth
-        """
-        # write_pfm(path + ".pfm", depth.astype(np.float32))
-        time1 = time.time()
-        depth_min = depth.min()
-        depth_max = depth.max()
-
-        max_val = (2**(8*bits))-1
-
-        if depth_max - depth_min > np.finfo("float").eps:
-            out = max_val * (depth - depth_min) / (depth_max - depth_min)
-        else:
-            out = np.zeros(depth.shape, dtype=depth.type)
-
-        if bits == 1:
-            time1 = time.time() - time1
-            print(time1)
-            return out.astype("uint8")
-        elif bits == 2:
-            return out.astype("uint16")
-
-        raise RuntimeError("Invalid bits")
 
 # ---------- Utility functions -----------
 
@@ -327,6 +308,8 @@ if __name__ == "__main__":
     v.set_bg(bgr)
     mi = MidasSingle(args)
 
+    buf = np.zeros((cam.height, cam.width, 3), dtype='uint8')
+
     time1 = 0
     while True:
         has_next, frame = cam.read()
@@ -336,8 +319,11 @@ if __name__ == "__main__":
         time1 = time.time()
         frame_depth = mi.single_frame(frame)
         # frame = depth_mask(frame, frame_depth, bgr, 70)
-        time1 = time.time() - time1
+        # torch.cuda.synchronize()
+        
         # frame = v.single_frame(frame)
-
-        # dsp.step(frame)
-        # print("fps:", 1.0/time1)
+        np.copyto(buf[:,:,2], frame_depth.cpu().numpy())
+        
+        dsp.step(buf)
+        time1 = time.time() - time1
+        print("fps:", 1.0/time1)

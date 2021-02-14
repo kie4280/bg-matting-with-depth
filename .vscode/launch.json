@@ -11,9 +11,9 @@
                 "--V2-model-checkpoint",
                 "/home/kie/research/pretrained/V2-model.pth",
                 "--Midas-model-checkpoint",
-                "/home/kie/research/pretrained/intel-MiDas-model-small.pt",
+                "/home/kie/research/pretrained/intel-MiDas-model.pt",
                 "--Midas-model-type",
-                "small"
+                "large"
             ]
         }
     ]
