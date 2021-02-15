@@ -16,10 +16,7 @@ import cv2
 import torch
 
 import torch
-from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, ToTensor, Resize
-from torchvision.transforms.functional import to_pil_image
-from tqdm import tqdm
 import numpy as np
 
 from MiDaS import utils
@@ -31,7 +28,7 @@ from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 from V2.model import MattingBase, MattingRefine
 
-filename = "far"
+filename_g = "far"
 video_format = "MOV"
 test_data_path = "/home/kie/personal_data"
 
@@ -69,7 +66,7 @@ args = parser.parse_args()
 # A wrapper that reads data from cv2.VideoCapture in its own thread to optimize.
 # Use .read() in a tight loop to get the newest frame
 class Camera:
-    def __init__(self, device_id="/home/kie/personal_data/{}.{}".format(filename, video_format)):
+    def __init__(self, device_id):
         self.capture = cv2.VideoCapture(device_id)
         if (not self.capture.isOpened()):
             print("cannot open input video")
@@ -269,8 +266,11 @@ class MidasSingle:
                 )
                 .squeeze()
             )
+            max_T = torch.max(prediction)
+            min_T = torch.min(prediction)
+            prediction = 255.0 / (max_T - min_T) * (prediction - min_T)
 
-        return prediction
+        return prediction.to(dtype=torch.uint8)
 
 
 # ---------- Utility functions -----------
@@ -290,19 +290,17 @@ def apply_mask(frame_orig: np.ndarray, frame_depth: np.ndarray, bgr: np.ndarray)
 
 
 def filter_depth(frame_depth: torch.Tensor, threshold: int = 60) -> np.ndarray:
-    with torch.no_grad():
-        max_T = torch.max(frame_depth)
-        min_T = torch.min(frame_depth)
-        thr = threshold / 255.0 * (max_T-min_T) + min_T
-        mask = torch.where(frame_depth > thr, 1, 0)
+    with torch.no_grad():        
+        mask = torch.where(frame_depth > threshold, 1, 0)
         return mask.to(dtype=torch.uint8).cpu().numpy()
 
 
 # --------------- Main ---------------
-if __name__ == "__main__":
 
-    cam = Camera()
-    dsp = Displayer(filename, cam.width, cam.height,
+
+def process_full(filename):
+    cam = Camera("/home/kie/personal_data/{}.{}".format(filename, video_format))
+    dsp = Displayer(filename+"_full", cam.width, cam.height,
                     cam.fps, show_info=(not args.hide_fps))
     bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
     vertical: bool = cam.width < cam.height
@@ -313,7 +311,7 @@ if __name__ == "__main__":
     mi = MidasSingle(args)
     blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     blank.fill(255)
-    time1 = 0
+    
     while True:
         has_next, frame = cam.read()
         if has_next is False:
@@ -324,9 +322,48 @@ if __name__ == "__main__":
         frame_depth_front = filter_depth(frame_depth, 60)
         frame_depth_end = filter_depth(frame_depth, 40)
         frame_fused = apply_mask(frame, frame_depth_front, bgr)
-        frame_matted = v2.single_frame(frame)
+        frame_matted = v2.single_frame(frame_fused)
         
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
         dsp.step(frame_matted)
         time1 = time.time() - time1
         print("fps:", 1.0/time1)
+
+def process_no_pre(filename):
+    cam = Camera("/home/kie/personal_data/{}.{}".format(filename, video_format))
+    dsp = Displayer(filename+"_no_pre", cam.width, cam.height,
+                    cam.fps, show_info=(not args.hide_fps))
+    depth_dsp = Displayer(filename+"_depth", cam.width, cam.height,
+                    cam.fps, show_info=(not args.hide_fps))
+    bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
+    vertical: bool = cam.width < cam.height
+    if (vertical):
+        bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+    v2 = BGv2(args)
+    v2.set_bg(bgr)
+    mi = MidasSingle(args)
+    blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
+    blank.fill(255)
+    buf = np.zeros((cam.height, cam.width, 3), dtype='uint8')
+    while True:
+        has_next, frame = cam.read()
+        if has_next is False:
+            break
+
+        time1 = time.time()
+        frame_depth = mi.single_frame(frame)
+        np.copyto(buf[:,:,2], frame_depth.cpu().numpy())
+        frame_depth_end = filter_depth(frame_depth, 40)
+        
+        frame_matted = v2.single_frame(frame)
+        
+        frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
+        dsp.step(frame_matted)
+        depth_dsp.step(buf)
+        time1 = time.time() - time1
+        print("fps:", 1.0/time1)
+
+if __name__ == "__main__":
+    process_full(filename_g)
+    process_no_pre(filename_g)
+   

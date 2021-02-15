@@ -5,5 +5,5 @@
 *.pt
 *.pth
 *.zip
-V2_with_depth/consistent_depth/**
+consistent_depth/**
 *.pyc
