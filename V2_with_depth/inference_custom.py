@@ -1,11 +1,12 @@
 """
 Command line arguments example:
 
-    python inference_webcam.py \
-        --model-type mattingrefine \
-        --model-backbone resnet50 \
-        --model-checkpoint "PATH_TO_CHECKPOINT" \
-        --resolution 1280 720
+    python inference_custom.py \
+        --V2-model-checkpoint
+            /home/kie/research/pretrained/V2-model.pth
+        --Midas-model-checkpoint
+            /home/kie/research/pretrained/intel-MiDas-model.pt
+        --Midas-model-type large
 
 """
 
@@ -236,22 +237,29 @@ class MidasSingle:
 
         self.model.to(self.device)
 
-    def single_frame(self, frame, bits=1) -> np.ndarray:
-        time1 = time.time()
+    def single_frame(self, frame, threshold=60) -> torch.Tensor:
+        """
+        compute the depth and output unnormalized depth map
+        """
         img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) / 255.0
         img_input = self.transform({"image": img})["image"]
+
+        # start = torch.cuda.Event(enable_timing=True)
+        # end = torch.cuda.Event(enable_timing=True)
+        # start.record()
+
         # compute
-        
         with torch.no_grad():
 
             sample = torch.from_numpy(img_input).to(self.device).unsqueeze(0)
             if self.optimize == True and self.device == torch.device("cuda"):
                 sample = sample.to(memory_format=torch.channels_last)
                 sample = sample.half()
+
             prediction = self.model.forward(sample)
-            torch.cuda.synchronize()
-            time1 = time.time() - time1
-            print(1.0/time1)
+            # end.record()
+            # torch.cuda.synchronize()
+            # print(start.elapsed_time(end))
             prediction = (
                 torch.nn.functional.interpolate(
                     prediction.unsqueeze(1),
@@ -261,20 +269,7 @@ class MidasSingle:
                 )
                 .squeeze()
             )
-            
-            max_T = torch.max(prediction)
-            min_T = torch.min(prediction)
-            
-            max_val = (2**(8*bits))-1
-            prediction = (max_val / (max_T - min_T)) * (prediction - min_T)
 
-            if bits == 1:
-                prediction = prediction.to(dtype=torch.uint8)
-            elif bits == 2:
-                prediction = prediction.to(dtype=torch.int32)
-            else:
-                raise RuntimeError("Invalid bits")
-       
         return prediction
 
 
@@ -286,13 +281,21 @@ def cv2_frame_to_cuda(frame):
     return ToTensor()(frame).unsqueeze_(0).cuda()
 
 
-def depth_mask(frame_orig, frame_depth, bgr, threshold: int = 80):
-    frame1 = np.where(frame_depth < threshold, 1, 0)
+def apply_mask(frame_orig: np.ndarray, frame_depth: np.ndarray, bgr: np.ndarray) -> np.ndarray:
     frame = np.zeros(frame_orig.shape, dtype='uint8')
     for i in range(3):
-        frame[:, :, i] = frame1 * frame_orig[:, :, i] + \
-            (1-frame1) * bgr[:, :, i]
+        frame[:, :, i] = frame_depth * frame_orig[:, :, i] + \
+            (1-frame_depth) * bgr[:, :, i]
     return frame
+
+
+def filter_depth(frame_depth: torch.Tensor, threshold: int = 60) -> np.ndarray:
+    with torch.no_grad():
+        max_T = torch.max(frame_depth)
+        min_T = torch.min(frame_depth)
+        thr = threshold / 255.0 * (max_T-min_T) + min_T
+        mask = torch.where(frame_depth > thr, 1, 0)
+        return mask.to(dtype=torch.uint8).cpu().numpy()
 
 
 # --------------- Main ---------------
@@ -302,14 +305,14 @@ if __name__ == "__main__":
     dsp = Displayer(filename, cam.width, cam.height,
                     cam.fps, show_info=(not args.hide_fps))
     bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
-    if (cam.width < cam.height):
+    vertical: bool = cam.width < cam.height
+    if (vertical):
         bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
-    v = BGv2(args)
-    v.set_bg(bgr)
+    v2 = BGv2(args)
+    v2.set_bg(bgr)
     mi = MidasSingle(args)
-
-    buf = np.zeros((cam.height, cam.width, 3), dtype='uint8')
-
+    blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
+    blank.fill(255)
     time1 = 0
     while True:
         has_next, frame = cam.read()
@@ -318,12 +321,12 @@ if __name__ == "__main__":
 
         time1 = time.time()
         frame_depth = mi.single_frame(frame)
-        # frame = depth_mask(frame, frame_depth, bgr, 70)
-        # torch.cuda.synchronize()
+        frame_depth_front = filter_depth(frame_depth, 60)
+        frame_depth_end = filter_depth(frame_depth, 40)
+        frame_fused = apply_mask(frame, frame_depth_front, bgr)
+        frame_matted = v2.single_frame(frame)
         
-        # frame = v.single_frame(frame)
-        np.copyto(buf[:,:,2], frame_depth.cpu().numpy())
-        
-        dsp.step(buf)
+        frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
+        dsp.step(frame_matted)
         time1 = time.time() - time1
         print("fps:", 1.0/time1)
