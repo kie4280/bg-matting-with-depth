@@ -27,10 +27,7 @@ from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 from V2.model import MattingBase, MattingRefine
-
-filenames = ["medium_distance", "close", "far", "fast_moving", "IMG_0150",
-             "IMG_0151", "IMG_0152", "IMG_0153", "IMG_0156", "IMG_0655", "IMG_0657"]
-video_format = "MOV"
+from tqdm import tqdm
 
 # --------------- Arguments ---------------
 
@@ -57,6 +54,7 @@ parser.add_argument("--Midas-model-type", type=str, default="large")
 parser.add_argument('--hide-fps', action='store_true')
 parser.add_argument('--resolution', type=int, nargs=2,
                     metavar=('width', 'height'), default=(1920, 1080))
+parser.add_argument("--file-list", type=str, required=True)
 
 args = parser.parse_args()
 
@@ -115,9 +113,10 @@ class FPSTracker:
 
 
 class Displayer:
-    def __init__(self, title, width, height, frame_rate, show_info=True):
+    def __init__(self, title, width, height, frame_rate, show_info=True, msg=None):
         self.title, self.width, self.height = title, width, height
         self.show_info = show_info
+        self.msg = msg
         self.fps_tracker = FPSTracker()
         self.videowriter = cv2.VideoWriter(self.title + '.avi', cv2.VideoWriter_fourcc(
             *'MPEG'), frame_rate, (self.width, self.height))
@@ -128,7 +127,10 @@ class Displayer:
         if self.show_info and fps_estimate is not None:
             message = f"{int(fps_estimate)} fps | {self.width}x{self.height}"
             cv2.putText(image, message, (10, 40),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0))
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), thickness=2)
+        if self.msg is not None:
+            cv2.putText(image, self.msg, (10, self.height-20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), thickness=2)
         self.videowriter.write(image)
 
     def __exit__(self, exec_type, exc_value, traceback):
@@ -292,19 +294,14 @@ def filter_depth(frame_depth: torch.Tensor, threshold: int = 60) -> np.ndarray:
         mask = torch.where(frame_depth > threshold, 1, 0)
         return mask.to(dtype=torch.uint8).cpu().numpy()
 
-
-def print_progress(msg: str) -> None:
-    print("", end='\x1b[1K\r')
-    print(msg, end='')
-
 # --------------- Main ---------------
 
 
-def process_full(filename):
+def process_full(filename, video_format="MOV"):
     cam = Camera(
         "/home/kie/personal_data/{}.{}".format(filename, video_format))
     dsp = Displayer("output/"+filename+"_full", cam.width, cam.height,
-                    cam.fps, show_info=(not args.hide_fps))
+                    cam.fps, show_info=(not args.hide_fps), msg="Filters all")
     bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
 
     if (cam.vertical):
@@ -314,7 +311,8 @@ def process_full(filename):
     mi = MidasSingle(args)
     blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     blank.fill(255)
-    frames = 0
+    tq = tqdm(total=cam.frame_count)
+    dilate_kernel = np.ones((5,5), dtype='uint8')
 
     while True:
         has_next, frame = cam.read()
@@ -324,27 +322,27 @@ def process_full(filename):
         time1 = time.time()
         frame_depth = mi.single_frame(frame)
         frame_depth_front = filter_depth(frame_depth, 60)
-        frame_depth_end = filter_depth(frame_depth, 40)
+        frame_depth_end = filter_depth(frame_depth, 80)
+        frame_depth_front = cv2.dilate(frame_depth_front, dilate_kernel, iterations=5)
+        frame_depth_end = cv2.dilate(frame_depth_end, dilate_kernel, iterations=5)
         frame_fused = apply_mask(frame, frame_depth_front, bgr)
         frame_matted = v2.single_frame(frame_fused)
 
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
         dsp.step(frame_matted)
         time1 = time.time() - time1
-        frames += 1
-        print_progress(
-            "fps {:.2f} {}/{} finished".format(1.0/time1, frames, cam.frame_count))
-
-    print("")
+        tq.set_postfix({"fps": "{:.2f}".format(1.0/time1)})
+        tq.update()
+    tq.close()
 
 
-def process_no_pre(filename):
+def process_no_pre(filename, video_format="MOV"):
     cam = Camera(
         "/home/kie/personal_data/{}.{}".format(filename, video_format))
     dsp = Displayer("output/"+filename+"_no_pre", cam.width, cam.height,
-                    cam.fps, show_info=(not args.hide_fps))
+                    cam.fps, show_info=(not args.hide_fps), msg="Filters output only")
     depth_dsp = Displayer("output/"+filename+"_depth", cam.width, cam.height,
-                          cam.fps, show_info=(not args.hide_fps))
+                          cam.fps, show_info=(not args.hide_fps), msg="depth map")
     bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
 
     if (cam.vertical):
@@ -355,8 +353,11 @@ def process_no_pre(filename):
     blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     blank.fill(255)
     buf = np.zeros((cam.height, cam.width, 3), dtype='uint8')
-    frames = 0
+    tq = tqdm(total=cam.frame_count)
+
+    dilate_kernel = np.ones((5,5), dtype='uint8')
     while True:
+        buf.fill(0)
         has_next, frame = cam.read()
         if has_next is False:
             break
@@ -364,31 +365,30 @@ def process_no_pre(filename):
         time1 = time.time()
         frame_depth = mi.single_frame(frame)
         np.copyto(buf[:, :, 2], frame_depth.cpu().numpy())
-        frame_depth_end = filter_depth(frame_depth, 40)
-
+        frame_depth_end = filter_depth(frame_depth, 80)
+        frame_depth_end = cv2.dilate(frame_depth_end, dilate_kernel, iterations=5)
         frame_matted = v2.single_frame(frame)
 
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
         dsp.step(frame_matted)
         depth_dsp.step(buf)
         time1 = time.time() - time1
-        frames += 1
-        print_progress(
-            "fps {:.2f} {}/{} finished".format(1.0/time1, frames, cam.frame_count))
-    print("")
+        tq.set_postfix({"fps": "{:.2f}".format(1.0/time1)})
+        tq.update()
+    tq.close()
 
 
 def merge(filename, video_format):
     orig = Camera(
         "/home/kie/personal_data/{}.{}".format(filename, video_format))
     all = Camera(
-        "/home/kie/research/BGMwd/output/"
+        "/home/kie/research/output/"
         "{}_full.{}".format(filename, "avi"))
     no_pre = Camera(
-        "/home/kie/research/BGMwd/output/"
+        "/home/kie/research/output/"
         "{}_no_pre.{}".format(filename, "avi"))
     depth = Camera(
-        "/home/kie/research/BGMwd/output/"
+        "/home/kie/research/output/"
         "{}_depth.{}".format(filename, "avi"))
 
     frames = [None, None, None, None]
@@ -431,9 +431,16 @@ def merge(filename, video_format):
 
 if __name__ == "__main__":
 
+    file_h = open(args.file_list, 'r')
+    filenames = file_h.readlines()
+
     for i, ff in enumerate(filenames):
+        name, extension = ff.strip("\n").split(' ')
+
         print("processing", i)
-        process_full(ff)
-        process_no_pre(ff)
-        merge(ff, video_format)
+        process_full(name)
+        process_no_pre(name)
+        merge(name, extension)
         print("finish")
+
+    file_h.close()

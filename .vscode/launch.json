@@ -13,7 +13,9 @@
                 "--Midas-model-checkpoint",
                 "/home/kie/research/pretrained/intel-MiDas-model.pt",
                 "--Midas-model-type",
-                "large"
+                "large",
+                "--file-list",
+                "input_file1.txt"
             ]
         },
         {
