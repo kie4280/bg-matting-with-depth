@@ -28,9 +28,9 @@ from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 from V2.model import MattingBase, MattingRefine
 
-filename_g = "far"
+filenames = ["medium_distance", "close", "far", "fast_moving", "IMG_0150",
+             "IMG_0151", "IMG_0152", "IMG_0153", "IMG_0156", "IMG_0655", "IMG_0657"]
 video_format = "MOV"
-test_data_path = "/home/kie/personal_data"
 
 # --------------- Arguments ---------------
 
@@ -71,13 +71,11 @@ class Camera:
         if (not self.capture.isOpened()):
             print("cannot open input video")
             exit()
-        # self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        # self.capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
         self.width = int(self.capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.height = int(self.capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
         self.fps = int(self.capture.get(cv2.CAP_PROP_FPS))
-        # self.capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
-        # self.success_reading, self.frame = self.capture.read()
+        self.vertical = self.height > self.width
+        self.frame_count = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
     def read(self):
         success, frame = self.capture.read()
@@ -118,7 +116,7 @@ class FPSTracker:
 
 class Displayer:
     def __init__(self, title, width, height, frame_rate, show_info=True):
-        self.title, self.width, self.height = "out_" + title, width, height
+        self.title, self.width, self.height = title, width, height
         self.show_info = show_info
         self.fps_tracker = FPSTracker()
         self.videowriter = cv2.VideoWriter(self.title + '.avi', cv2.VideoWriter_fourcc(
@@ -180,7 +178,7 @@ class MidasSingle:
 
         Args:
             model_path (str): path to saved model
-            optimize (bool): 
+            optimize (bool):
         """
 
         # set torch options
@@ -290,28 +288,34 @@ def apply_mask(frame_orig: np.ndarray, frame_depth: np.ndarray, bgr: np.ndarray)
 
 
 def filter_depth(frame_depth: torch.Tensor, threshold: int = 60) -> np.ndarray:
-    with torch.no_grad():        
+    with torch.no_grad():
         mask = torch.where(frame_depth > threshold, 1, 0)
         return mask.to(dtype=torch.uint8).cpu().numpy()
 
+
+def print_progress(msg: str) -> None:
+    print("", end='\x1b[1K\r')
+    print(msg, end='')
 
 # --------------- Main ---------------
 
 
 def process_full(filename):
-    cam = Camera("/home/kie/personal_data/{}.{}".format(filename, video_format))
-    dsp = Displayer(filename+"_full", cam.width, cam.height,
+    cam = Camera(
+        "/home/kie/personal_data/{}.{}".format(filename, video_format))
+    dsp = Displayer("output/"+filename+"_full", cam.width, cam.height,
                     cam.fps, show_info=(not args.hide_fps))
     bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
-    vertical: bool = cam.width < cam.height
-    if (vertical):
+
+    if (cam.vertical):
         bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
     v2 = BGv2(args)
     v2.set_bg(bgr)
     mi = MidasSingle(args)
     blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     blank.fill(255)
-    
+    frames = 0
+
     while True:
         has_next, frame = cam.read()
         if has_next is False:
@@ -323,21 +327,27 @@ def process_full(filename):
         frame_depth_end = filter_depth(frame_depth, 40)
         frame_fused = apply_mask(frame, frame_depth_front, bgr)
         frame_matted = v2.single_frame(frame_fused)
-        
+
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
         dsp.step(frame_matted)
         time1 = time.time() - time1
-        print("fps:", 1.0/time1)
+        frames += 1
+        print_progress(
+            "fps {:.2f} {}/{} finished".format(1.0/time1, frames, cam.frame_count))
+
+    print("")
+
 
 def process_no_pre(filename):
-    cam = Camera("/home/kie/personal_data/{}.{}".format(filename, video_format))
-    dsp = Displayer(filename+"_no_pre", cam.width, cam.height,
+    cam = Camera(
+        "/home/kie/personal_data/{}.{}".format(filename, video_format))
+    dsp = Displayer("output/"+filename+"_no_pre", cam.width, cam.height,
                     cam.fps, show_info=(not args.hide_fps))
-    depth_dsp = Displayer(filename+"_depth", cam.width, cam.height,
-                    cam.fps, show_info=(not args.hide_fps))
+    depth_dsp = Displayer("output/"+filename+"_depth", cam.width, cam.height,
+                          cam.fps, show_info=(not args.hide_fps))
     bgr = cv2.imread("/home/kie/personal_data/{}_bgr.png".format(filename))
-    vertical: bool = cam.width < cam.height
-    if (vertical):
+
+    if (cam.vertical):
         bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
     v2 = BGv2(args)
     v2.set_bg(bgr)
@@ -345,6 +355,7 @@ def process_no_pre(filename):
     blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     blank.fill(255)
     buf = np.zeros((cam.height, cam.width, 3), dtype='uint8')
+    frames = 0
     while True:
         has_next, frame = cam.read()
         if has_next is False:
@@ -352,18 +363,77 @@ def process_no_pre(filename):
 
         time1 = time.time()
         frame_depth = mi.single_frame(frame)
-        np.copyto(buf[:,:,2], frame_depth.cpu().numpy())
+        np.copyto(buf[:, :, 2], frame_depth.cpu().numpy())
         frame_depth_end = filter_depth(frame_depth, 40)
-        
+
         frame_matted = v2.single_frame(frame)
-        
+
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
         dsp.step(frame_matted)
         depth_dsp.step(buf)
         time1 = time.time() - time1
-        print("fps:", 1.0/time1)
+        frames += 1
+        print_progress(
+            "fps {:.2f} {}/{} finished".format(1.0/time1, frames, cam.frame_count))
+    print("")
+
+
+def merge(filename, video_format):
+    orig = Camera(
+        "/home/kie/personal_data/{}.{}".format(filename, video_format))
+    all = Camera(
+        "/home/kie/research/BGMwd/output/"
+        "{}_full.{}".format(filename, "avi"))
+    no_pre = Camera(
+        "/home/kie/research/BGMwd/output/"
+        "{}_no_pre.{}".format(filename, "avi"))
+    depth = Camera(
+        "/home/kie/research/BGMwd/output/"
+        "{}_depth.{}".format(filename, "avi"))
+
+    frames = [None, None, None, None]
+    if orig.vertical:
+        width = int(orig.width/orig.height*1080)
+        output = Displayer("{}_final".format(filename), width*4,
+                           1080, orig.fps, show_info=False)
+        buf = np.zeros((1080, width*4, 3), dtype='uint8')
+    else:
+        width = int(1920/2)
+        height = int(1080/2)
+        output = Displayer("{}_final".format(filename), 1920,
+                           1080, orig.fps, show_info=False)
+        buf = np.zeros((1080, 1920, 3), dtype='uint8')
+    while True:
+        s1, frames[0] = orig.read()
+        s2, frames[1] = all.read()
+        s3, frames[2] = no_pre.read()
+        s4, frames[3] = depth.read()
+        if (s1 and s2 and s3 and s4) == False:
+            break
+        if orig.vertical:
+
+            for i in range(4):
+                frames[i] = cv2.resize(
+                    frames[i], (width, 1080))
+                buf[:, width*i:width*(i+1):] = frames[i]
+
+        else:
+            for i in range(4):
+                frames[i] = cv2.resize(
+                    frames[i], (width, height))
+            for j in range(2):
+                for i in range(2):
+                    buf[height*j:height*(j+1), width *
+                        i:width*(i+1):] = frames[j*2+i]
+
+        output.step(buf)
+
 
 if __name__ == "__main__":
-    process_full(filename_g)
-    process_no_pre(filename_g)
-   
+
+    for i, ff in enumerate(filenames):
+        print("processing", i)
+        process_full(ff)
+        process_no_pre(ff)
+        merge(ff, video_format)
+        print("finish")
