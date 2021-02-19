@@ -5,7 +5,7 @@
             "name": "Python: inference",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/V2_with_depth/inference_custom.py",
+            "program": "${workspaceFolder}/inference_custom.py",
             "console": "integratedTerminal",
             "args": [
                 "--V2-model-checkpoint",
@@ -22,7 +22,7 @@
             "name": "Python: inference old",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/V2_with_depth/inference_old.py",
+            "program": "${workspaceFolder}/inference_old.py",
             "console": "integratedTerminal",
             "args": [
                 "--V2-model-checkpoint",

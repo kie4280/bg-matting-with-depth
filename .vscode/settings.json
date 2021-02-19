@@ -2,13 +2,17 @@
     "python.linting.pylintEnabled": true,
     "python.linting.enabled": true,
     "python.autoComplete.extraPaths": [
-        "./V2_with_depth/**",
-        "./V2_with_depth/V2/**",
-        "./V2_with_depth/MiDas/**"
+        "./V2_with_depth/",
+        "./V2_with_depth/V2/",
+        "./V2_with_depth/MiDas/"
+    ],
+    "python.pythonPath": "/home/kie/anaconda3/envs/env01/bin/python",
+    "python.linting.pylintArgs": [
+        "--generate-members"
     ],
     "python.analysis.extraPaths": [
-        "./V2_with_depth/**",
-        "./V2_with_depth/V2/**",
-        "./V2_with_depth/MiDas/**"
+        "./V2_with_depth/",
+        "./V2_with_depth/V2/",
+        "./V2_with_depth/MiDas/"
     ],
 }

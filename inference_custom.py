@@ -19,13 +19,11 @@ import torch
 from torchvision.transforms import Compose, ToTensor, Resize
 import numpy as np
 
-from MiDaS import utils
 
 from torchvision.transforms import Compose
 from MiDaS.midas.midas_net import MidasNet
 from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
-
 from V2.model import MattingBase, MattingRefine
 from tqdm import tqdm
 
