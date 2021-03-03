@@ -12,15 +12,11 @@ Command line arguments example:
 
 import argparse
 import time
+from typing import Tuple
 import cv2
-import torch
-
 import torch
 from torchvision.transforms import Compose, ToTensor, Resize
 import numpy as np
-
-
-from torchvision.transforms import Compose
 from MiDaS.midas.midas_net import MidasNet
 from MiDaS.midas.midas_net_custom import MidasNet_small
 from MiDaS.midas.transforms import Resize, NormalizeImage, PrepareForNet
@@ -73,7 +69,7 @@ class Camera:
         self.vertical = self.height > self.width
         self.frame_count = int(self.capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
-    def read(self):
+    def read(self) -> Tuple[bool, np.ndarray]:
         success, frame = self.capture.read()
         if (not success):
             return False, None
@@ -105,9 +101,6 @@ class FPSTracker:
 
     def get(self):
         return self._avg_fps
-
-# Wrapper for playing a stream with cv2.imshow(). It can accept an image and return keypress info for basic interactivity.
-# It also tracks FPS and optionally overlays info onto the stream.
 
 
 class Displayer:
@@ -310,7 +303,7 @@ def process_full(filename, video_format="MOV"):
     blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     blank.fill(255)
     tq = tqdm(total=cam.frame_count)
-    dilate_kernel = np.ones((5,5), dtype='uint8')
+    dilate_kernel = np.ones((5, 5), dtype='uint8')
 
     while True:
         has_next, frame = cam.read()
@@ -321,8 +314,10 @@ def process_full(filename, video_format="MOV"):
         frame_depth = mi.single_frame(frame)
         frame_depth_front = filter_depth(frame_depth, 60)
         frame_depth_end = filter_depth(frame_depth, 80)
-        frame_depth_front = cv2.dilate(frame_depth_front, dilate_kernel, iterations=5)
-        frame_depth_end = cv2.dilate(frame_depth_end, dilate_kernel, iterations=5)
+        frame_depth_front = cv2.dilate(
+            frame_depth_front, dilate_kernel, iterations=5)
+        frame_depth_end = cv2.dilate(
+            frame_depth_end, dilate_kernel, iterations=5)
         frame_fused = apply_mask(frame, frame_depth_front, bgr)
         frame_matted = v2.single_frame(frame_fused)
 
@@ -353,7 +348,7 @@ def process_no_pre(filename, video_format="MOV"):
     buf = np.zeros((cam.height, cam.width, 3), dtype='uint8')
     tq = tqdm(total=cam.frame_count)
 
-    dilate_kernel = np.ones((5,5), dtype='uint8')
+    dilate_kernel = np.ones((5, 5), dtype='uint8')
     while True:
         buf.fill(0)
         has_next, frame = cam.read()
@@ -364,7 +359,8 @@ def process_no_pre(filename, video_format="MOV"):
         frame_depth = mi.single_frame(frame)
         np.copyto(buf[:, :, 2], frame_depth.cpu().numpy())
         frame_depth_end = filter_depth(frame_depth, 80)
-        frame_depth_end = cv2.dilate(frame_depth_end, dilate_kernel, iterations=5)
+        frame_depth_end = cv2.dilate(
+            frame_depth_end, dilate_kernel, iterations=5)
         frame_matted = v2.single_frame(frame)
 
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
