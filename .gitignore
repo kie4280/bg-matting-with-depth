@@ -7,3 +7,4 @@
 *.zip
 consistent_depth/**
 *.pyc
+dataset/**

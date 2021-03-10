@@ -32,6 +32,16 @@
                 "--Midas-model-type",
                 "large"
             ]
-        }
+        },
+        {
+            "name": "Python: random data",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/training/prepare_data.py",
+            "console": "integratedTerminal",
+            "args": [
+               
+            ]
+        },
     ]
 }
