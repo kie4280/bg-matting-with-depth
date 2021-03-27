@@ -3,7 +3,7 @@
     "python.linting.enabled": true,
     "python.autoComplete.extraPaths": [
         "training",
-        "v2",
+        "V2",
         "V2/model",
     ],
     "python.linting.pylintArgs": [
@@ -11,7 +11,9 @@
     ],
     "python.analysis.extraPaths": [
         "training",
-        "v2",
+        "V2",
         "V2/model",
+        "V2/dataset",
+        
     ],
 }

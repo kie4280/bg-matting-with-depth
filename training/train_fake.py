@@ -31,7 +31,6 @@ parser.add_argument('-n_blocks2', '--n_blocks2', type=int, default=3,help='Numbe
 
 args=parser.parse_args()
 
-if 
 
 for i in range(args.epoch):
     pass
