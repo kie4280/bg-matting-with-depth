@@ -1,11 +1,9 @@
-*.MOV
-*.avi
-*.png
-*.mp4
-*.jpg
 *.pt
 *.pth
 *.zip
+data/**
 consistent_depth/**
 *.pyc
 dataset/**
+output/**
+log/**

@@ -5,11 +5,11 @@ You can download pretrained DeepLabV3 weights from <https://github.com/VainF/Dee
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=0 python BGMwd/V2/train_base.py \
+    CUDA_VISIBLE_DEVICES=1 python V2/train_base.py \
         --dataset-name photomatte85 \
         --model-backbone resnet50 \
         --model-name mattingbase-resnet50-photomatte85 \
-        --model-pretrain-initialization "pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
+        --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
         --epoch-end 8
 
 """

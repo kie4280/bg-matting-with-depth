@@ -33,12 +33,12 @@ DATA_PATH = {
     },
     'photomatte85': {
         'train': {
-            'fgr': '/home/kie/research/BGMwd/dataset/foreground',
-            'pha': '/home/kie/research/BGMwd/dataset/alpha'
+            'fgr': '/home/kie/research/BGMwd/data/foreground',
+            'pha': '/home/kie/research/BGMwd/data/alpha'
         },
         'valid': {
-            'fgr': '/home/kie/research/BGMwd/dataset/foreground',
-            'pha': '/home/kie/research/BGMwd/dataset/alpha'
+            'fgr': '/home/kie/research/BGMwd/data/foreground',
+            'pha': '/home/kie/research/BGMwd/data/alpha'
         }
     },
     'distinction': {
@@ -62,7 +62,7 @@ DATA_PATH = {
         },
     },
     'backgrounds': {
-        'train': '/home/kie/research/BGMwd/dataset/school building',
-        'valid': '/home/kie/research/BGMwd/dataset/school building'
+        'train': '/home/kie/research/BGMwd/data/house',
+        'valid': '/home/kie/research/BGMwd/data/house'
     },
 }

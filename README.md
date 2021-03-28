@@ -14,3 +14,15 @@ python inference_custom.py \
             /home/kie/research/pretrained/intel-MiDas-model.pt \
         --Midas-model-type large
 ```
+
+## Training
+```
+CUDA_VISIBLE_DEVICES=1 python V2/train_base.py \
+        --dataset-name photomatte85 \
+        --model-backbone resnet50 \
+        --model-name mattingbase-resnet50-photomatte85 \
+        --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
+        --epoch-end 8
+```
+
+
