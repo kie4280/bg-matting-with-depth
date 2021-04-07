@@ -81,6 +81,25 @@ class AlphaExtractor:
         pass
 
 
+class VideoSlicer:
+    def __init__(self, input_video:str, output_dir:str = "./output") -> None:
+        self.input_video = pathlib.Path(input_video)
+        self.output_dir = pathlib.Path(output_dir)
+    def start(self):
+        cap = cv2.VideoCapture(str(self.input_video))
+        frame_index:int = 1
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if ret == False:
+                break
+            cv2.imwrite(str(self.output_dir.joinpath(self.input_video.stem)) + "-" + str(frame_index) + ".png", frame)
+            print("Processed frame {}".format(frame_index))
+            frame_index += 1
+
+        
+
 if __name__ == "__main__":
-    rd = AlphaExtractor("dataset/foreground", "dataset/alpha")
-    rd.extract()
+    # rd = AlphaExtractor("dataset/foreground", "dataset/alpha")
+    # rd.extract()
+    vs = VideoSlicer("data/custom_videos/lib_3.mp4", output_dir="data/custom")
+    vs.start()

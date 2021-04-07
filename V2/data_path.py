@@ -62,7 +62,7 @@ DATA_PATH = {
         },
     },
     'backgrounds': {
-        'train': '/home/kie/research/BGMwd/data/house',
+        'train': '/home/kie/research/BGMwd/data/custom',
         'valid': '/home/kie/research/BGMwd/data/house'
     },
 }

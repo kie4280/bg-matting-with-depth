@@ -2,7 +2,40 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: inference",
+            "name": "Python: inference video",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/V2/inference_video.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--model-type",
+                "mattingbase",
+                "--model-backbone",
+                "resnet50",
+                "--model-backbone-scale",
+                "0.25 ",
+                "--model-refine-mode",
+                "sampling",
+                "--model-refine-sample-pixels",
+                "80000",
+                "--model-checkpoint",
+                "/home/kie/research/BGMwd/checkpoint/mattingbase-resnet50-photomatte85-custom/epoch-99.pth",
+                "--video-src",
+                "/home/kie/personal_data/far.MOV",
+                "--video-bgr",
+                "/home/kie/personal_data/far_bgr.png",
+                
+                "--output-dir",
+                "/home/kie/output",
+                "--output-type",
+                "com",
+                "fgr",
+                "pha",
+                "err",
+            ]
+        },
+        {
+            "name": "Python: inference custom",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/inference_custom.py",
@@ -16,21 +49,6 @@
                 "large",
                 "--file-list",
                 "input_file1.txt"
-            ]
-        },
-        {
-            "name": "Python: inference old",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/inference_old.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--V2-model-checkpoint",
-                "/home/kie/research/pretrained/V2-model.pth",
-                "--Midas-model-checkpoint",
-                "/home/kie/research/pretrained/intel-MiDas-model.pt",
-                "--Midas-model-type",
-                "large"
             ]
         },
         {
@@ -53,14 +71,14 @@
                 "--model-backbone",
                 "resnet50",
                 "--model-name",
-                "mattingbase-resnet50-photomatte85",
+                "mattingbase-resnet50-photomatte85-custom",
                 "--model-pretrain-initialization",
                 "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth",
                 "--epoch-end",
-                "8"
+                "10"
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0"
+                "CUDA_VISIBLE_DEVICES": "1"
             }
         },
     ]

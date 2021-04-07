@@ -8,9 +8,9 @@ Example:
     CUDA_VISIBLE_DEVICES=1 python V2/train_base.py \
         --dataset-name photomatte85 \
         --model-backbone resnet50 \
-        --model-name mattingbase-resnet50-photomatte85 \
+        --model-name mattingbase-resnet50-photomatte85-custom \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
-        --epoch-end 8
+        --epoch-end 10
 
 """
 
