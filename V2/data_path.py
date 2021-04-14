@@ -33,12 +33,12 @@ DATA_PATH = {
     },
     'photomatte85': {
         'train': {
-            'fgr': '/home/kie/research/BGMwd/data/foreground',
-            'pha': '/home/kie/research/BGMwd/data/alpha'
+            'fgr': '/home/kie/data/foreground',
+            'pha': '/home/kie/data/alpha'
         },
         'valid': {
-            'fgr': '/home/kie/research/BGMwd/data/foreground',
-            'pha': '/home/kie/research/BGMwd/data/alpha'
+            'fgr': '/home/kie/data/foreground',
+            'pha': '/home/kie/data/alpha'
         }
     },
     'distinction': {
@@ -62,7 +62,7 @@ DATA_PATH = {
         },
     },
     'backgrounds': {
-        'train': '/home/kie/research/BGMwd/data/custom',
-        'valid': '/home/kie/research/BGMwd/data/house'
+        'train': '/home/kie/data/custom',
+        'valid': '/home/kie/data/house'
     },
 }

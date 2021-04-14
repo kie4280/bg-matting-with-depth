@@ -5,10 +5,11 @@ You can download pretrained DeepLabV3 weights from <https://github.com/VainF/Dee
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=1 python V2/train_base.py \
+    CUDA_VISIBLE_DEVICES=0 python V2/train_base.py \
         --dataset-name photomatte85 \
         --model-backbone resnet50 \
-        --model-name mattingbase-resnet50-photomatte85-custom \
+        --model-name custom \
+        --model-last-checkpoint "/home/kie/research/BGMwd/checkpoint/epoch-99-iter-39999.pth" \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
         --epoch-end 10
 
@@ -82,7 +83,7 @@ def train():
             A.PairApplyOnlyAtIndices([1], T.ColorJitter(0.15, 0.15, 0.15, 0.05)),
             A.PairApply(T.ToTensor())
         ]), assert_equal_length=True),
-        ImagesDataset(DATA_PATH['backgrounds']['train'], mode='RGB', transforms=T.Compose([
+        ImagesDataset(DATA_PATH['backgrounds']['train'], transforms=T.Compose([
             A.RandomAffineAndResize((512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 2), shear=(-5, 5)),
             T.RandomHorizontalFlip(),
             A.RandomBoxBlur(0.1, 5),
@@ -95,7 +96,7 @@ def train():
                                   shuffle=True,
                                   batch_size=args.batch_size,
                                   num_workers=args.num_workers,
-                                  pin_memory=True)
+                                  pin_memory=False)
     
     # Validation DataLoader
     dataset_valid = ZipDataset([

@@ -22,11 +22,12 @@ class RandomData:
         self.search_terms = search_terms
 
     def generate_data(self, dataset_size=100):
-        old_files = glob.glob("dataset/output/*")
-        for f in old_files:
-            os.remove(f)
+        
         tasks = []
         for i in self.search_terms:
+            old_files = glob.glob("data/{}/*".format(i))
+            for f in old_files:
+                os.remove(f)
             task = self.loop.create_task(self._getbackground(i))
             tasks.append(task)
         fu = asyncio.wait(tasks)
@@ -37,7 +38,7 @@ class RandomData:
         # creating object
         await self.loop.run_in_executor(None, functools.partial(
             downloader.download,
-            search_term, limit=self.category_size,  output_dir='dataset',
+            search_term, limit=self.category_size,  output_dir='data',
             adult_filter_off=True, force_replace=False, timeout=60, show_progress=False))
 
     def _random_place(self, dataset_size):
@@ -89,17 +90,26 @@ class VideoSlicer:
         cap = cv2.VideoCapture(str(self.input_video))
         frame_index:int = 1
         while cap.isOpened():
-            ret, frame = cap.read()
-            if ret == False:
+            try:
+                ret, frame = cap.read()
+                if ret == False:
+                    break
+                
+                cv2.imwrite(str(self.output_dir.joinpath(self.input_video.stem)) + "-" + str(frame_index) + ".png", frame)
+                print("Processed frame {}".format(frame_index))
+                frame_index += 1
+            except KeyboardInterrupt:
                 break
-            cv2.imwrite(str(self.output_dir.joinpath(self.input_video.stem)) + "-" + str(frame_index) + ".png", frame)
-            print("Processed frame {}".format(frame_index))
-            frame_index += 1
+
+            
+        cap.release()
 
         
 
 if __name__ == "__main__":
     # rd = AlphaExtractor("dataset/foreground", "dataset/alpha")
     # rd.extract()
-    vs = VideoSlicer("data/custom_videos/lib_3.mp4", output_dir="data/custom")
+    vs = VideoSlicer("data/custom_videos/forest_short.mp4", output_dir="data/custom")
     vs.start()
+    # rd = RandomData([search_terms[0]], category_size=1000)
+    # rd.generate_data()
