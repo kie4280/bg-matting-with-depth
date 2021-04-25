@@ -10,10 +10,7 @@ Example:
         --model-refine-mode sampling \
         --model-refine-sample-pixels 80000 \
         --model-checkpoint "PATH_TO_CHECKPOINT" \
-        --images-src "PATH_TO_IMAGES_SRC_DIR" \
-        --images-bgr "PATH_TO_IMAGES_BGR_DIR" \
-        --output-dir "PATH_TO_OUTPUT_DIR" \
-        --output-type com fgr pha
+        --output-file "PATH_TO_OUTPUT" \
 
 """
 
@@ -26,11 +23,11 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.data import DataLoader
 from torchvision import transforms as T
-from torchvision.transforms.functional import to_pil_image
-from threading import Thread
 from tqdm import tqdm
+from torch.nn import functional as F
 
 from dataset import ImagesDataset, ZipDataset
+from data_path import DATA_PATH
 from dataset import augmentation as A
 from model import MattingBase, MattingRefine
 from inference_utils import HomographicAlignment
@@ -41,25 +38,27 @@ from inference_utils import HomographicAlignment
 
 parser = argparse.ArgumentParser(description='Inference images')
 
-parser.add_argument('--model-type', type=str, required=True, choices=['mattingbase', 'mattingrefine'])
-parser.add_argument('--model-backbone', type=str, required=True, choices=['resnet101', 'resnet50', 'mobilenetv2'])
+parser.add_argument('--model-type', type=str, required=True,
+                    choices=['mattingbase', 'mattingrefine'])
+parser.add_argument('--model-backbone', type=str, required=True,
+                    choices=['resnet101', 'resnet50', 'mobilenetv2'])
 parser.add_argument('--model-backbone-scale', type=float, default=0.25)
 parser.add_argument('--model-checkpoint', type=str, required=True)
-parser.add_argument('--model-refine-mode', type=str, default='sampling', choices=['full', 'sampling', 'thresholding'])
+parser.add_argument('--model-refine-mode', type=str,
+                    default='sampling', choices=['full', 'sampling', 'thresholding'])
 parser.add_argument('--model-refine-sample-pixels', type=int, default=80_000)
 parser.add_argument('--model-refine-threshold', type=float, default=0.7)
 parser.add_argument('--model-refine-kernel-size', type=int, default=3)
 
-parser.add_argument('--images-src', type=str, required=True)
-parser.add_argument('--images-bgr', type=str, required=True)
-
-parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda')
-parser.add_argument('--num-workers', type=int, default=0, 
-    help='number of worker threads used in DataLoader. Note that Windows need to use single thread (0).')
+parser.add_argument('--device', type=str,
+                    choices=['cpu', 'cuda'], default='cuda')
+parser.add_argument('--num-workers', type=int, default=0,
+                    help='number of worker threads used in DataLoader. Note that Windows need to use single thread (0).')
 parser.add_argument('--preprocess-alignment', action='store_true')
 
-parser.add_argument('--output-dir', type=str, required=True)
-parser.add_argument('--output-types', type=str, required=True, nargs='+', choices=['com', 'pha', 'fgr', 'err', 'ref'])
+parser.add_argument('--output-file', type=str, required=True)
+parser.add_argument('--output-types', type=str, required=True,
+                    nargs='+', choices=['com', 'pha', 'fgr', 'err', 'ref'])
 parser.add_argument('-y', action='store_true')
 
 args = parser.parse_args()
@@ -89,18 +88,31 @@ if args.model_type == 'mattingrefine':
         args.model_refine_kernel_size)
 
 model = model.to(device).eval()
-model.load_state_dict(torch.load(args.model_checkpoint, map_location=device), strict=False)
+model.load_state_dict(torch.load(args.model_checkpoint,
+                      map_location=device), strict=False)
 
 
-# Load images
-dataset = ZipDataset([
-    ImagesDataset(args.images_src),
-    ImagesDataset(args.images_bgr),
-], assert_equal_length=True, transforms=A.PairCompose([
-    HomographicAlignment() if args.preprocess_alignment else A.PairApply(nn.Identity()),
-    A.PairApply(T.ToTensor())
-]))
-dataloader = DataLoader(dataset, batch_size=1, num_workers=args.num_workers, pin_memory=True)
+# Validation DataLoader
+dataset_valid = ZipDataset([
+    ZipDataset([
+        ImagesDataset(DATA_PATH[args.dataset_name]['valid']['pha'], mode='L'),
+        ImagesDataset(DATA_PATH[args.dataset_name]['valid']['fgr'], mode='RGB')
+    ], transforms=A.PairCompose([
+        A.PairRandomAffineAndResize(
+            (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(0.3, 1), shear=(-5, 5)),
+        A.PairApply(T.ToTensor())
+    ]), assert_equal_length=True),
+    ImagesDataset(DATA_PATH['backgrounds']['valid'], mode='RGB', transforms=T.Compose([
+        A.RandomAffineAndResize((512, 512), degrees=(-5, 5),
+                                translate=(0.1, 0.1), scale=(1, 1.2), shear=(-5, 5)),
+        T.ToTensor()
+    ])),
+])
+
+dataloader_valid = DataLoader(dataset_valid,
+                              pin_memory=True,
+                              batch_size=args.batch_size,
+                              num_workers=args.num_workers)
 
 
 # Create output directory
@@ -112,39 +124,38 @@ if os.path.exists(args.output_dir):
 
 for output_type in args.output_types:
     os.makedirs(os.path.join(args.output_dir, output_type))
-    
 
-# Worker function
-def writer(img, path):
-    img = to_pil_image(img[0].cpu())
-    img.save(path)
-    
-    
+
+# outputs 5 vals:
+# alpha: MSE, SAD, GRAD, CONN, fgr: MSE
+def compute_metric(pred_pha, pred_fgr, true_pha, true_fgr):
+    a1 = F.mse_loss(pred_pha, true_pha)
+    a2 = F.l1_loss(pred_pha, true_pha)
+    a5 = F.mse_loss((pred_fgr * (true_pha > 0)), (true_fgr * (true_pha > 0)))
+    return a1, a2, 0, 0, a5
+
+
+
+MSE_pha_loss = 0
+MSE_fgr_loss = 0
+SAD_loss = 0
+GRAD_loss = 0
+CONN_loss = 0
+
 # Conversion loop
 with torch.no_grad():
-    for i, (src, bgr) in enumerate(tqdm(dataloader)):
-        src = src.to(device, non_blocking=True)
-        bgr = bgr.to(device, non_blocking=True)
-        
-        if args.model_type == 'mattingbase':
-            pha, fgr, err, _ = model(src, bgr)
-        elif args.model_type == 'mattingrefine':
-            pha, fgr, _, _, err, ref = model(src, bgr)
+    for (true_pha, true_fgr), true_bgr in dataloader_valid:
+        batch_size = true_pha.size(0)
 
-        pathname = dataset.datasets[0].filenames[i]
-        pathname = os.path.relpath(pathname, args.images_src)
-        pathname = os.path.splitext(pathname)[0]
-            
-        if 'com' in args.output_types:
-            com = torch.cat([fgr * pha.ne(0), pha], dim=1)
-            Thread(target=writer, args=(com, os.path.join(args.output_dir, 'com', pathname + '.png'))).start()
-        if 'pha' in args.output_types:
-            Thread(target=writer, args=(pha, os.path.join(args.output_dir, 'pha', pathname + '.jpg'))).start()
-        if 'fgr' in args.output_types:
-            Thread(target=writer, args=(fgr, os.path.join(args.output_dir, 'fgr', pathname + '.jpg'))).start()
-        if 'err' in args.output_types:
-            err = F.interpolate(err, src.shape[2:], mode='bilinear', align_corners=False)
-            Thread(target=writer, args=(err, os.path.join(args.output_dir, 'err', pathname + '.jpg'))).start()
-        if 'ref' in args.output_types:
-            ref = F.interpolate(ref, src.shape[2:], mode='nearest')
-            Thread(target=writer, args=(ref, os.path.join(args.output_dir, 'ref', pathname + '.jpg'))).start()
+        true_pha = true_pha.cuda(non_blocking=True)
+        true_fgr = true_fgr.cuda(non_blocking=True)
+        true_bgr = true_bgr.cuda(non_blocking=True)
+        true_src = true_pha * true_fgr + (1 - true_pha) * true_bgr
+
+        pred_pha, pred_fgr, pred_err = model(true_src, true_bgr)[:3]
+        # compute metric
+        MSE_pha_loss, SAD_loss, GRAD_loss, CONN_loss, MSE_fgr_loss += \
+            compute_metric(pred_pha, pred_fgr, true_pha, true_fgr)
+
+MSE_pha_loss, SAD_loss, GRAD_loss, CONN_loss, MSE_fgr_loss /= len(dataset_valid)
+
