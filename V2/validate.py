@@ -3,14 +3,15 @@ Inference images: Extract matting on images.
 
 Example:
 
-    python inference_images.py \
+    CUDA_VISIBLE_DEVICES=0 python V2/validate.py \
+        --dataset-name "photomatte85" \
         --model-type mattingrefine \
         --model-backbone resnet50 \
         --model-backbone-scale 0.25 \
         --model-refine-mode sampling \
         --model-refine-sample-pixels 80000 \
-        --model-checkpoint "PATH_TO_CHECKPOINT" \
-        --output-file "PATH_TO_OUTPUT" \
+        --model-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingrefine/epoch-7.pth" \
+
 
 """
 
@@ -38,6 +39,8 @@ from inference_utils import HomographicAlignment
 
 parser = argparse.ArgumentParser(description='Inference images')
 
+parser.add_argument('--dataset-name', type=str,
+                    required=True, choices=DATA_PATH.keys())
 parser.add_argument('--model-type', type=str, required=True,
                     choices=['mattingbase', 'mattingrefine'])
 parser.add_argument('--model-backbone', type=str, required=True,
@@ -56,18 +59,9 @@ parser.add_argument('--num-workers', type=int, default=0,
                     help='number of worker threads used in DataLoader. Note that Windows need to use single thread (0).')
 parser.add_argument('--preprocess-alignment', action='store_true')
 
-parser.add_argument('--output-file', type=str, required=True)
-parser.add_argument('--output-types', type=str, required=True,
-                    nargs='+', choices=['com', 'pha', 'fgr', 'err', 'ref'])
 parser.add_argument('-y', action='store_true')
 
 args = parser.parse_args()
-
-
-assert 'err' not in args.output_types or args.model_type in ['mattingbase', 'mattingrefine'], \
-    'Only mattingbase and mattingrefine support err output'
-assert 'ref' not in args.output_types or args.model_type in ['mattingrefine'], \
-    'Only mattingrefine support ref output'
 
 
 # --------------- Main ---------------
@@ -111,19 +105,8 @@ dataset_valid = ZipDataset([
 
 dataloader_valid = DataLoader(dataset_valid,
                               pin_memory=True,
-                              batch_size=args.batch_size,
+                              batch_size=1,
                               num_workers=args.num_workers)
-
-
-# Create output directory
-if os.path.exists(args.output_dir):
-    if args.y or input(f'Directory {args.output_dir} already exists. Override? [Y/N]: ').lower() == 'y':
-        shutil.rmtree(args.output_dir)
-    else:
-        exit()
-
-for output_type in args.output_types:
-    os.makedirs(os.path.join(args.output_dir, output_type))
 
 
 # outputs 5 vals:
@@ -134,6 +117,9 @@ def compute_metric(pred_pha, pred_fgr, true_pha, true_fgr):
     a5 = F.mse_loss((pred_fgr * (true_pha > 0)), (true_fgr * (true_pha > 0)))
     return a1, a2, 0, 0, a5
 
+
+def write_metric_file():
+    pass
 
 
 MSE_pha_loss = 0
@@ -154,8 +140,16 @@ with torch.no_grad():
 
         pred_pha, pred_fgr, pred_err = model(true_src, true_bgr)[:3]
         # compute metric
-        MSE_pha_loss, SAD_loss, GRAD_loss, CONN_loss, MSE_fgr_loss += \
-            compute_metric(pred_pha, pred_fgr, true_pha, true_fgr)
+        mm = compute_metric(pred_pha, pred_fgr, true_pha, true_fgr)
+        MSE_pha_loss += mm[0]
+        SAD_loss += mm[1]
+        MSE_fgr_loss += mm[4]
 
-MSE_pha_loss, SAD_loss, GRAD_loss, CONN_loss, MSE_fgr_loss /= len(dataset_valid)
+MSE_pha_loss /= len(dataset_valid)
+SAD_loss /= len(dataloader_valid)
+MSE_fgr_loss /= len(dataloader_valid)
 
+
+print("MSE alpha:", float(MSE_pha_loss.cpu()))
+print("SAD_loss:", float(SAD_loss.cpu()))
+print("MSE fgr:", float(MSE_fgr_loss))

@@ -32,11 +32,13 @@ from tqdm import tqdm
 from torchvision import transforms as T
 from PIL import Image
 
-from data_path import DATA_PATH
-from dataset import ImagesDataset, ZipDataset, VideoDataset, SampleDataset
-from dataset import augmentation as A
-from model import MattingBase
-from model.utils import load_matched_state_dict
+from V2.data_path import DATA_PATH
+from V2.dataset import ImagesDataset, ZipDataset, VideoDataset, SampleDataset
+from V2.dataset import augmentation as A
+from V2.model.model import MattingBase
+from V2.model.utils import load_matched_state_dict
+from depth_estimator import Midas_depth
+import numpy as np
 
 
 # --------------- Arguments ---------------
@@ -66,6 +68,8 @@ args = parser.parse_args()
 
 
 # --------------- Loading ---------------
+
+MD = Midas_depth()
 
 
 def train():
@@ -169,7 +173,13 @@ def train():
                 true_src[aug_noise_idx] = true_src[aug_noise_idx].add_(torch.randn_like(true_src[aug_noise_idx]).mul_(0.03 * random.random())).clamp_(0, 1)
                 true_bgr[aug_noise_idx] = true_bgr[aug_noise_idx].add_(torch.randn_like(true_bgr[aug_noise_idx]).mul_(0.03 * random.random())).clamp_(0, 1)
             del aug_noise_idx
-            
+            # feed into MiDas for depth estimate
+
+            depth_input = true_src.cpu().numpy()
+            depth_input = np.moveaxis(depth_input, 1, -1)
+            true_depth = MD.inference(depth_input)
+            print(true_depth)
+
             # Augment background with jitter
             aug_jitter_idx = torch.rand(len(true_src)) < 0.8
             if aug_jitter_idx.any():

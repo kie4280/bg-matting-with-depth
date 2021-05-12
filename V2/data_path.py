@@ -23,12 +23,12 @@ dataset to the list as long as it follows the format. 'fgr' should point to fore
 DATA_PATH = {
     'videomatte240k': {
         'train': {
-            'fgr': 'PATH_TO_IMAGES_DIR',
-            'pha': 'PATH_TO_IMAGES_DIR'
+            'fgr': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/train/fgr',
+            'pha': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/train/pha'
         },
         'valid': {
-            'fgr': 'PATH_TO_IMAGES_DIR',
-            'pha': 'PATH_TO_IMAGES_DIR'
+            'fgr': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/test/fgr',
+            'pha': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/test/pha'
         }
     },
     'photomatte85': {

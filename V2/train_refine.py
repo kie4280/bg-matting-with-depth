@@ -6,13 +6,13 @@ Select GPUs through CUDA_VISIBLE_DEVICES environment variable.
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=0 python V2/train_refine.py \
+    CUDA_VISIBLE_DEVICES=0,1 python V2/train_refine.py \
         --dataset-name photomatte85 \
         --model-backbone resnet50 \
         --model-name mattingrefine \
-        --model-last-checkpoint "/home/kie/research/BGMwd/checkpoint/custom/epoch-9.pth" \
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/custom/epoch-9.pth" \
         --epoch-end 8\
-        --batch-size 2
+        --batch-size 4
 
 """
 

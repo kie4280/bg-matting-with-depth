@@ -2,11 +2,12 @@
 Command line arguments example:
 
     python inference_custom.py \
-        --V2-model-checkpoint
-            /home/kie/research/pretrained/V2-model.pth
-        --Midas-model-checkpoint
-            /home/kie/research/pretrained/intel-MiDas-model.pt
-        --Midas-model-type large
+        --V2-model-checkpoint \
+            /eva_data/kie//research/pretrained/V2-model.pth \
+        --Midas-model-checkpoint \
+            /eva_data/kie/research/pretrained/intel-MiDas-model.pt \
+        --Midas-model-type large \
+        --file-list "old/input_file1.txt"
 
 """
 
@@ -159,7 +160,8 @@ class BGv2:
                 res = pha * fgr + (1 - pha) * torch.ones_like(fgr)
                 res = res.mul(255).byte().cpu().permute(0, 2, 3, 1).numpy()[0]
                 res = cv2.cvtColor(res, cv2.COLOR_RGB2BGR)
-                return res
+                # the return here is modified
+                return res, pha
 
         return None
 
@@ -328,6 +330,8 @@ def process_full(filename, video_format="MOV"):
         tq.update()
     tq.close()
 
+# mask out
+
 
 def process_no_pre(filename, video_format="MOV"):
     cam = Camera(
@@ -366,6 +370,56 @@ def process_no_pre(filename, video_format="MOV"):
         frame_matted = apply_mask(frame_matted, frame_depth_end, blank)
         dsp.step(frame_matted)
         depth_dsp.step(buf)
+        time1 = time.time() - time1
+        tq.set_postfix({"fps": "{:.2f}".format(1.0/time1)})
+        tq.update()
+    tq.close()
+
+# mask out part of the alpha where depth > threshold
+
+
+def process_pha(filename, video_format="MOV"):
+    cam = Camera(
+        "/eva_data/kie/personal_data/{}.{}".format(filename, video_format))
+    dsp = Displayer("output/"+filename+"_pha", cam.width, cam.height,
+                    cam.fps, show_info=(not args.hide_fps), msg="Filters all")
+    bgr = cv2.imread("/eva_data/kie/personal_data/{}_bgr.png".format(filename))
+
+    if (cam.vertical):
+        bgr = cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
+    v2 = BGv2(args)
+    v2.set_bg(bgr)
+    mi = MidasSingle(args)
+    blank = np.zeros((cam.height, cam.width, 3), dtype='uint8')
+    blank.fill(255)
+    tq = tqdm(total=cam.frame_count)
+    dilate_kernel = np.ones((5, 5), dtype='uint8')
+
+    while True:
+        has_next, frame = cam.read()
+        if has_next is False:
+            break
+
+        time1 = time.time()
+        frame_depth = mi.single_frame(frame)
+        composite, alpha = v2.single_frame(frame)
+        frame_mask_pha = filter_depth(frame_depth, 80)
+        frame_mask_pha = cv2.dilate(
+            frame_mask_pha, dilate_kernel, iterations=5)
+
+        frame_matted = np.zeros(frame.shape, dtype=np.uint8)
+        alpha = np.squeeze(alpha.cpu().numpy() * frame_mask_pha)
+        # for i in range(3):
+        #     frame_matted[:, :, i] = frame[:, :, i] * \
+        #         alpha * frame_mask_pha
+        frame = np.moveaxis(frame, 2, 0)
+        white = 255 * np.ones_like(frame, dtype=np.uint8)
+        frame_matted = alpha * frame + \
+            (1-alpha) * white
+        # frame_matted[:, :, 1] = 255*(1-alpha*frame_mask_pha) * \
+        #     (np.ones(frame.shape[:2], dtype=np.uint8))
+        output = np.moveaxis(frame_matted, 0, -1).astype(np.uint8)
+        dsp.step(output)
         time1 = time.time() - time1
         tq.set_postfix({"fps": "{:.2f}".format(1.0/time1)})
         tq.update()
@@ -432,9 +486,9 @@ if __name__ == "__main__":
         name, extension = ff.strip("\n").split(' ')
 
         print("processing", i)
-        process_full(name)
-        process_no_pre(name)
-        merge(name, extension)
+        process_pha(name)
+        # process_no_pre(name)
+        # merge(name, extension)
         print("finish")
 
     file_h.close()

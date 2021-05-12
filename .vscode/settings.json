@@ -5,6 +5,8 @@
         "training",
         "V2",
         "V2/model",
+        "MiDas",
+        "MiDas/midas"
     ],
     "python.linting.pylintArgs": [
         "--generate-members"
@@ -13,8 +15,8 @@
         "training",
         "V2",
         "V2/model",
-        "V2/dataset",
-        
+        "MiDas",
+        "MiDas/midas"
     ],
     "python.pythonPath": "/eva_data/kie/anaconda3/envs/env01/bin/python",
 }

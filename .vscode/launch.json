@@ -23,7 +23,7 @@
                 "--video-src",
                 "/home/kie/personal_data/far.MOV",
                 "--video-bgr",
-                "/home/kie/personal_data/far_bgr.png",                
+                "/home/kie/personal_data/far_bgr.png",
                 "--output-dir",
                 "/home/kie/output",
                 "--output-type",
@@ -33,7 +33,7 @@
                 "err",
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0"
+                "CUDA_VISIBLE_DEVICES": "0,1"
             }
         },
         {
@@ -44,14 +44,17 @@
             "console": "integratedTerminal",
             "args": [
                 "--V2-model-checkpoint",
-                "/home/kie/research/pretrained/V2-model.pth",
+                "/eva_data/kie/research/pretrained/V2-model.pth",
                 "--Midas-model-checkpoint",
-                "/home/kie/research/pretrained/intel-MiDas-model.pt",
+                "/eva_data/kie/research/pretrained/intel-MiDas-model.pt",
                 "--Midas-model-type",
                 "large",
                 "--file-list",
-                "input_file1.txt"
-            ]
+                "old/input_file2.txt"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "1"
+            }
         },
         {
             "name": "Python: random data",
@@ -75,16 +78,68 @@
                 "--model-name",
                 "mattingbase-resnet50-photomatte85-custom",
                 "--model-last-checkpoint",
-                "/home/kie/research/BGMwd/checkpoint/epoch-99-iter-39999.pth",
+                "/eva_data/kie/research/pretrained/V2-model.pth",
                 "--model-pretrain-initialization",
                 "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth",
                 "--epoch-end",
                 "10",
                 "--num-workers",
-                "16"
+                "8"
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0"
+                "CUDA_VISIBLE_DEVICES": "1"
+            }
+        },
+        {
+            "name": "Python: validate",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/V2/validate.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--dataset-name",
+                "photomatte85",
+                "--model-type",
+                "mattingrefine",
+                "--model-backbone",
+                "resnet50",
+                "--model-backbone-scale",
+                "0.25 ",
+                "--model-refine-mode",
+                "sampling",
+                "--model-refine-sample-pixels",
+                "80000",
+                "--model-checkpoint",
+                "/eva_data/kie/research/pretrained/V2-model.pth",
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1"
+            }
+        },
+        {
+            "name": "Python: train depth",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/depth_training.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--dataset-name",
+                "videomatte240k",
+                "--model-backbone",
+                "resnet50",
+                "--model-name",
+                "mattingbase-resnet50-videomatte240k-custom",
+                // "--model-last-checkpoint",
+                // "/eva_data/kie/research/pretrained/V2-model.pth",
+                "--model-pretrain-initialization",
+                "/eva_data/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth",
+                "--epoch-end",
+                "10",
+                "--num-workers",
+                "8"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1"
             }
         },
     ]
