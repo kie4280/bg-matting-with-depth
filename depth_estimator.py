@@ -16,14 +16,15 @@ from MiDas.midas.transforms import Resize, NormalizeImage, PrepareForNet
 
 class Midas_depth:
     def __init__(self, model_path="/eva_data/kie/research/pretrained/intel-MiDas-dpt-large.pt",
-                 optimize=True) -> None:
+                 device: str = "cuda:1", optimize=True) -> None:
 
         print("initialize MiDas")
         self.optimize = optimize
         # select device
         self.device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
-        # print("device: %s" % device)
+            device if torch.cuda.is_available() else "cpu")
+
+        print("device: {}".format(self.device))
 
         self.model = DPTDepthModel(
             path=model_path,
@@ -74,7 +75,8 @@ class Midas_depth:
 
             # compute
             with torch.no_grad():
-                sample = torch.from_numpy(img_input).to(self.device).unsqueeze(0)
+                sample = torch.from_numpy(img_input).to(
+                    self.device).unsqueeze(0)
                 if self.optimize == True and self.device == torch.device("cuda"):
                     sample = sample.to(memory_format=torch.channels_last)
                     sample = sample.half()
