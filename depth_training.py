@@ -35,7 +35,7 @@ from PIL import Image
 from V2.data_path import DATA_PATH
 from V2.dataset import ImagesDataset, ZipDataset, VideoDataset, SampleDataset
 from V2.dataset import augmentation as A
-from V2.model.model import MattingBase
+from V2.model.model import MattingBaseWD
 from V2.model.utils import load_matched_state_dict
 from depth_estimator import Midas_depth
 import numpy as np
@@ -123,7 +123,7 @@ def train():
                                   num_workers=args.num_workers)
 
     # Model
-    model = MattingBase(args.model_backbone).cuda()
+    model = MattingBaseWD(args.model_backbone).cuda()
 
     if args.model_last_checkpoint is not None:
         load_matched_state_dict(model, torch.load(args.model_last_checkpoint))
@@ -178,7 +178,7 @@ def train():
             depth_input = true_src.cpu().numpy()
             depth_input = np.moveaxis(depth_input, 1, -1)
             true_depth = MD.inference(depth_input)
-            print(true_depth)
+            print(true_depth.shape)
 
             # Augment background with jitter
             aug_jitter_idx = torch.rand(len(true_src)) < 0.8

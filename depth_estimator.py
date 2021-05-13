@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 
 import torch
+from torch import tensor
 from MiDas import utils
 import PIL
 
@@ -66,6 +67,8 @@ class Midas_depth:
 
     def inference(self, imgs):
         predictions = []
+        ll = len(imgs)
+        shape = imgs[0].shape
         for img in imgs:
             img_input = self.transform({"image": img})["image"]
 
@@ -84,8 +87,8 @@ class Midas_depth:
                         align_corners=False,
                     )
                     .squeeze()
-                    .cpu()
-                    .numpy()
                 )
                 predictions.append(prediction)
-        return prediction
+        predictions = torch.cat(predictions, dim=0)
+        predictions = predictions.reshape((ll, *shape[0:2]))
+        return predictions

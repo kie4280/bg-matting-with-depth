@@ -101,7 +101,8 @@ class MattingBase(Base):
         return pha, fgr, err, hid
 
 
-class MattingRefineWD(MattingBase):
+
+class MattingRefine(MattingBase):
     """
     MattingRefine includes the refiner module to upsample coarse result to full resolution.
     MattingRefine extends MattingBase.
@@ -200,7 +201,48 @@ class MattingRefineWD(MattingBase):
         return pha, fgr, pha_sm, fgr_sm, err_sm, ref_sm
 
 
-class MattingRefineWD(MattingBase):
+class MattingBaseWD(Base):
+    """
+    MattingBase is used to produce coarse global results at a lower resolution.
+    MattingBase extends Base.
+
+    Args:
+        backbone: ["resnet50", "resnet101", "mobilenetv2"]
+
+    Input:
+        src: (B, 3, H, W) the source image. Channels are RGB values normalized to 0 ~ 1.
+        bgr: (B, 3, H, W) the background image . Channels are RGB values normalized to 0 ~ 1.
+
+    Output:
+        pha: (B, 1, H, W) the alpha prediction. Normalized to 0 ~ 1.
+        fgr: (B, 3, H, W) the foreground prediction. Channels are RGB values normalized to 0 ~ 1.
+        err: (B, 1, H, W) the error prediction. Normalized to 0 ~ 1.
+        hid: (B, 32, H, W) the hidden encoding. Used for connecting refiner module.
+        
+
+    Example:
+        model = MattingBase(backbone='resnet50')
+
+        pha, fgr, err, hid = model(src, bgr)    # for training
+        pha, fgr = model(src, bgr)[:2]          # for inference
+    """
+
+    def __init__(self, backbone: str):
+        super().__init__(backbone, in_channels=6, out_channels=(1 + 3 + 1 + 32))
+
+    def forward(self, src, bgr):
+        x = torch.cat([src, bgr], dim=1)
+        x, *shortcuts = self.backbone(x)
+        x = self.aspp(x)
+        x = self.decoder(x, *shortcuts)
+        pha = x[:, 0:1].clamp_(0., 1.)
+        fgr = x[:, 1:4].add(src).clamp_(0., 1.)
+        err = x[:, 4:5].clamp_(0., 1.)
+        hid = x[:, 5:].relu_()
+        return pha, fgr, err, hid
+
+
+class MattingRefineWD(MattingBaseWD):
     """
     MattingRefineWD includes the MiDas depth estimator and the refiner module to upsample coarse 
         result to full resolution.
