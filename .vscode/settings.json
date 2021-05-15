@@ -18,5 +18,5 @@
         "MiDas",
         "MiDas/midas"
     ],
-    "python.pythonPath": "/eva_data/kie/anaconda3/envs/env01/bin/python",
+    "python.pythonPath": "/eva_data/kie/anaconda3/envs/py38/bin/python",
 }

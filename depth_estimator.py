@@ -66,11 +66,10 @@ class Midas_depth:
 
         self.model.to(self.device)
 
-    def inference(self, imgs):
+    def inference(self, imgs: np.ndarray) -> torch.Tensor:
         predictions = []
-        ll = len(imgs)
-        shape = imgs[0].shape
         for img in imgs:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img_input = self.transform({"image": img})["image"]
 
             # compute
@@ -88,9 +87,29 @@ class Midas_depth:
                         mode="bicubic",
                         align_corners=False,
                     )
-                    .squeeze()
+
                 )
                 predictions.append(prediction)
         predictions = torch.cat(predictions, dim=0)
-        predictions = predictions.reshape((ll, *shape[0:2]))
+
         return predictions
+
+
+def Normalize(depth_tensor: torch.Tensor) -> torch.Tensor:
+    max_d = depth_tensor.max()
+    min_d = depth_tensor.min()
+    norm = (depth_tensor - min_d) / (max_d - min_d)
+    return norm
+
+
+if __name__ == "__main__":
+    MD = Midas_depth()
+    img = [(cv2.imread(
+        "/eva_data/kie/data/training/background/custom/lib_3-98.png") / 255.0)]
+    output = MD.inference(img).squeeze_(dim=0)
+
+    white = 255 * torch.ones([3, output.shape[1], output.shape[2]],
+                       dtype=torch.float32, device='cuda:1')
+    output = Normalize(output) * white
+    output = output.moveaxis(0, -1)
+    cv2.imwrite("test.png", output.to(torch.uint8).cpu().numpy())

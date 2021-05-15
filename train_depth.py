@@ -5,13 +5,16 @@ You can download pretrained DeepLabV3 weights from <https://github.com/VainF/Dee
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=0 python V2/train_base.py \
-        --dataset-name photomatte85 \
+    CUDA_VISIBLE_DEVICES=0,1 python train_depth.py \
+        --dataset-name depth \
         --model-backbone resnet50 \
-        --model-name custom \
-        --model-last-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth" \
-        --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
-        --epoch-end 10
+        --model-name mattingbase-resnet50-MiDas-depth \
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-resnet50-MiDas-depth-0/epoch-0-iter-12499.pth" \
+        --model-pretrain-initialization "/eva_data/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
+        --log-train-images-interval 200 \
+        --checkpoint-interval 500 \
+        --epoch-end 10 \
+        --num-workers 8
 
 """
 
@@ -37,7 +40,7 @@ from V2wd.dataset import ImagesDataset, ZipDataset, VideoDataset, SampleDataset
 from V2wd.dataset import augmentation as A
 from V2wd.model.model import MattingBase
 from V2wd.model.utils import load_matched_state_dict
-from depth_estimator import Midas_depth
+from depth_estimator import Midas_depth, Normalize
 import numpy as np
 
 
@@ -77,32 +80,16 @@ MD = Midas_depth()
 def train():
 
     # Training DataLoader
-    dataset_train = ZipDataset([
-        ZipDataset([
-            ImagesDataset(DATA_PATH[args.dataset_name]
-                          ['train']['pha'], mode='L'),
-            ImagesDataset(DATA_PATH[args.dataset_name]
-                          ['train']['fgr'], mode='RGB'),
-        ], transforms=A.PairCompose([
-            A.PairRandomAffineAndResize(
-                (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(0.4, 1), shear=(-5, 5)),
-            A.PairRandomHorizontalFlip(),
-            A.PairRandomBoxBlur(0.1, 5),
-            A.PairRandomSharpen(0.1),
-            A.PairApplyOnlyAtIndices(
-                [1], T.ColorJitter(0.15, 0.15, 0.15, 0.05)),
-            A.PairApply(T.ToTensor())
-        ]), assert_equal_length=True),
-        ImagesDataset(DATA_PATH['backgrounds']['train'], transforms=T.Compose([
-            A.RandomAffineAndResize(
-                (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 2), shear=(-5, 5)),
-            T.RandomHorizontalFlip(),
-            A.RandomBoxBlur(0.1, 5),
-            A.RandomSharpen(0.1),
-            T.ColorJitter(0.15, 0.15, 0.15, 0.05),
-            T.ToTensor()
-        ])),
-    ])
+    dataset_train = ImagesDataset(DATA_PATH[args.dataset_name]['train']['depth'], transforms=T.Compose([
+        A.RandomAffineAndResize(
+            (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 2), shear=(-5, 5)),
+        T.RandomHorizontalFlip(),
+        A.RandomBoxBlur(0.1, 5),
+        A.RandomSharpen(0.1),
+        T.ColorJitter(0.15, 0.15, 0.15, 0.05),
+        T.ToTensor()
+    ]))
+
     dataloader_train = DataLoader(dataset_train,
                                   shuffle=True,
                                   batch_size=args.batch_size,
@@ -110,23 +97,12 @@ def train():
                                   pin_memory=False)
 
     # Validation DataLoader
-    dataset_valid = ZipDataset([
-        ZipDataset([
-            ImagesDataset(DATA_PATH[args.dataset_name]
-                          ['valid']['pha'], mode='L'),
-            ImagesDataset(DATA_PATH[args.dataset_name]
-                          ['valid']['fgr'], mode='RGB')
-        ], transforms=A.PairCompose([
-            A.PairRandomAffineAndResize(
-                (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(0.3, 1), shear=(-5, 5)),
-            A.PairApply(T.ToTensor())
-        ]), assert_equal_length=True),
-        ImagesDataset(DATA_PATH['backgrounds']['valid'], mode='RGB', transforms=T.Compose([
-            A.RandomAffineAndResize(
-                (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 1.2), shear=(-5, 5)),
-            T.ToTensor()
-        ])),
-    ])
+    dataset_valid = ImagesDataset(DATA_PATH[args.dataset_name]['train']['depth'], mode='RGB', transforms=T.Compose([
+        A.RandomAffineAndResize(
+            (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 1.2), shear=(-5, 5)),
+        T.ToTensor()
+    ]))
+
     dataset_valid = SampleDataset(dataset_valid, 50)
     dataloader_valid = DataLoader(dataset_valid,
                                   pin_memory=True,
@@ -156,65 +132,68 @@ def train():
 
     # Run loop
     for epoch in range(args.epoch_start, args.epoch_end):
-        for i, ((true_pha, true_fgr), true_bgr) in enumerate(tqdm(dataloader_train)):
+        for i, (true_src) in enumerate(tqdm(dataloader_train)):
             step = epoch * len(dataloader_train) + i
 
-            true_pha = true_pha.cuda(non_blocking=True)
-            true_fgr = true_fgr.cuda(non_blocking=True)
-            true_bgr = true_bgr.cuda(non_blocking=True)
-            true_pha, true_fgr, true_bgr = random_crop(
-                true_pha, true_fgr, true_bgr)
-
-            true_src = true_bgr.clone()
+            true_src = true_src.cuda("cuda:0", non_blocking=True)
+            true_pha = torch.zeros(true_src.shape[0], 1, true_src.shape[2], true_src.shape[3]).cuda(
+                "cuda:0", non_blocking=True)
+            true_fgr = torch.zeros_like(true_src).cuda(
+                "cuda:0", non_blocking=True)
+            true_bgr = torch.rand(true_src.shape).cuda(
+                "cuda:0", non_blocking=True)
+            true_pha, true_fgr, true_bgr, true_src = random_crop(
+                true_pha, true_fgr, true_bgr, true_src)
 
             # Augment with shadow
-            aug_shadow_idx = torch.rand(len(true_src)) < 0.3
-            if aug_shadow_idx.any():
-                aug_shadow = true_pha[aug_shadow_idx].mul(
-                    0.3 * random.random())
-                aug_shadow = T.RandomAffine(
-                    degrees=(-5, 5), translate=(0.2, 0.2), scale=(0.5, 1.5), shear=(-5, 5))(aug_shadow)
-                aug_shadow = kornia.filters.box_blur(
-                    aug_shadow, (random.choice(range(20, 40)),) * 2)
-                true_src[aug_shadow_idx] = true_src[aug_shadow_idx].sub_(
-                    aug_shadow).clamp_(0, 1)
-                del aug_shadow
-            del aug_shadow_idx
+            # aug_shadow_idx = torch.rand(len(true_src)) < 0.3
+            # if aug_shadow_idx.any():
+            #     aug_shadow = true_pha[aug_shadow_idx].mul(
+            #         0.3 * random.random())
+            #     aug_shadow = T.RandomAffine(
+            #         degrees=(-5, 5), translate=(0.2, 0.2), scale=(0.5, 1.5), shear=(-5, 5))(aug_shadow)
+            #     aug_shadow = kornia.filters.box_blur(
+            #         aug_shadow, (random.choice(range(20, 40)),) * 2)
+            #     true_src[aug_shadow_idx] = true_src[aug_shadow_idx].sub_(
+            #         aug_shadow).clamp_(0, 1)
+            #     del aug_shadow
+            # del aug_shadow_idx
 
             # Composite foreground onto source
-            true_src = true_fgr * true_pha + true_src * (1 - true_pha)
+            # true_src = true_fgr * true_pha + true_src * (1 - true_pha)
 
             # Augment with noise
             aug_noise_idx = torch.rand(len(true_src)) < 0.4
             if aug_noise_idx.any():
                 true_src[aug_noise_idx] = true_src[aug_noise_idx].add_(torch.randn_like(
                     true_src[aug_noise_idx]).mul_(0.03 * random.random())).clamp_(0, 1)
-                true_bgr[aug_noise_idx] = true_bgr[aug_noise_idx].add_(torch.randn_like(
-                    true_bgr[aug_noise_idx]).mul_(0.03 * random.random())).clamp_(0, 1)
+                # true_bgr[aug_noise_idx] = true_bgr[aug_noise_idx].add_(torch.randn_like(
+                #     true_bgr[aug_noise_idx]).mul_(0.03 * random.random())).clamp_(0, 1)
             del aug_noise_idx
             # feed into MiDas for depth estimate
 
             depth_input = true_src.cpu().numpy()
             depth_input = np.moveaxis(depth_input, 1, -1)
-            true_depth = MD.inference(depth_input)
+            true_depth = MD.inference(depth_input).cuda(
+                "cuda:0", non_blocking=True)
 
             # Augment background with jitter
-            aug_jitter_idx = torch.rand(len(true_src)) < 0.8
-            if aug_jitter_idx.any():
-                true_bgr[aug_jitter_idx] = kornia.augmentation.ColorJitter(
-                    0.18, 0.18, 0.18, 0.1)(true_bgr[aug_jitter_idx])
-            del aug_jitter_idx
+            # aug_jitter_idx = torch.rand(len(true_src)) < 0.8
+            # if aug_jitter_idx.any():
+            #     true_bgr[aug_jitter_idx] = kornia.augmentation.ColorJitter(
+            #         0.18, 0.18, 0.18, 0.1)(true_bgr[aug_jitter_idx])
+            # del aug_jitter_idx
 
             # Augment background with affine
-            aug_affine_idx = torch.rand(len(true_bgr)) < 0.3
-            if aug_affine_idx.any():
-                true_bgr[aug_affine_idx] = T.RandomAffine(
-                    degrees=(-1, 1), translate=(0.01, 0.01))(true_bgr[aug_affine_idx])
-            del aug_affine_idx
+            # aug_affine_idx = torch.rand(len(true_bgr)) < 0.3
+            # if aug_affine_idx.any():
+            #     true_bgr[aug_affine_idx] = T.RandomAffine(
+            #         degrees=(-1, 1), translate=(0.01, 0.01))(true_bgr[aug_affine_idx])
+            # del aug_affine_idx
 
             with autocast():
-                pred_pha, pred_fgr, pred_err, _, pred_depth = model(true_src, true_bgr)[
-                    :3]
+                pred_pha, pred_fgr, pred_err, _, pred_depth = model(
+                    true_src, true_bgr)
                 loss = compute_loss(
                     pred_pha, pred_fgr, pred_err, pred_depth, true_pha, true_fgr, true_depth)
 
@@ -235,16 +214,23 @@ def train():
                     pred_fgr * pred_pha, nrow=5), step)
                 writer.add_image('train_pred_err',
                                  make_grid(pred_err, nrow=5), step)
+                white = 255 * torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(Normalize(pred_depth))
+                writer.add_image('train_pred_depth',
+                                 make_grid(white.to(torch.uint8), nrow=5), step)
                 writer.add_image('train_true_src',
                                  make_grid(true_src, nrow=5), step)
                 writer.add_image('train_true_bgr',
                                  make_grid(true_bgr, nrow=5), step)
+                white = 255 * torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(Normalize(true_depth))
+                writer.add_image('train_true_depth',
+                                 make_grid(white.to(torch.uint8), nrow=5), step)
 
             del true_pha, true_fgr, true_bgr
             del pred_pha, pred_fgr, pred_err
 
             if (i + 1) % args.log_valid_interval == 0:
-                valid(model, dataloader_valid, writer, step)
+                pass
+                # valid(model, dataloader_valid, writer, step)
 
             if (step + 1) % args.checkpoint_interval == 0:
                 torch.save(model.state_dict(
@@ -257,15 +243,21 @@ def train():
 # --------------- Utils ---------------
 
 
-def compute_loss(pred_pha, pred_fgr, pred_err, pred_depth, true_pha, true_fgr, true_depth):
+def compute_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor, pred_err: torch.Tensor, pred_depth: torch.Tensor,
+                 true_pha: torch.Tensor, true_fgr: torch.Tensor, true_depth: torch.Tensor):
     true_err = torch.abs(pred_pha.detach() - true_pha)
     true_msk = true_pha != 0
     matting_loss = F.l1_loss(pred_pha, true_pha) + \
         F.l1_loss(kornia.sobel(pred_pha), kornia.sobel(true_pha)) + \
         F.l1_loss(pred_fgr * true_msk, true_fgr * true_msk) + \
         F.mse_loss(pred_err, true_err)
+    depth_abs = (pred_depth-true_depth.detach()).abs()
+    c = depth_abs.max() / 5
+    mask = depth_abs <= c
+    depth_loss = ((mask * depth_abs).sum() +
+                  ((~mask * depth_abs) ** 2 + c ** 2).sum() / (2*c)) / (mask.shape[2] * mask.shape[3])
 
-    return matting_loss
+    return 0 + depth_loss
 
 
 def random_crop(*imgs):

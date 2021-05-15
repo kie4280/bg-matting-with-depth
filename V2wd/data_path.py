@@ -41,6 +41,14 @@ DATA_PATH = {
             'pha': '/eva_data/kie/data/validate/alpha'
         }
     },
+    'depth': {
+        'train': {
+            'depth': '/eva_data/kie/data/training/videos/output'
+        },
+        'valid': {
+            'depth': '/eva_data/kie/data/training/videos/output'
+        }
+    },
     'distinction': {
         'train': {
             'fgr': 'PATH_TO_IMAGES_DIR',
