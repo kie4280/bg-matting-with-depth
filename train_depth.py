@@ -214,19 +214,23 @@ def train():
                     pred_fgr * pred_pha, nrow=5), step)
                 writer.add_image('train_pred_err',
                                  make_grid(pred_err, nrow=5), step)
-                white = 255 * torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(Normalize(pred_depth))
+                white = 255 * \
+                    torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
+                        Normalize(pred_depth))
                 writer.add_image('train_pred_depth',
                                  make_grid(white.to(torch.uint8), nrow=5), step)
                 writer.add_image('train_true_src',
                                  make_grid(true_src, nrow=5), step)
                 writer.add_image('train_true_bgr',
                                  make_grid(true_bgr, nrow=5), step)
-                white = 255 * torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(Normalize(true_depth))
+                white = 255 * \
+                    torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
+                        Normalize(true_depth))
                 writer.add_image('train_true_depth',
                                  make_grid(white.to(torch.uint8), nrow=5), step)
 
-            del true_pha, true_fgr, true_bgr
-            del pred_pha, pred_fgr, pred_err
+            del true_pha, true_fgr, true_bgr, true_depth
+            del pred_pha, pred_fgr, pred_err, pred_depth
 
             if (i + 1) % args.log_valid_interval == 0:
                 pass
@@ -251,7 +255,8 @@ def compute_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor, pred_err: torch
         F.l1_loss(kornia.sobel(pred_pha), kornia.sobel(true_pha)) + \
         F.l1_loss(pred_fgr * true_msk, true_fgr * true_msk) + \
         F.mse_loss(pred_err, true_err)
-    depth_abs = (pred_depth-true_depth.detach()).abs()
+    true_depth = true_depth.detach()
+    depth_abs = (pred_depth-true_depth).abs() * (true_depth >= 0)
     c = depth_abs.max() / 5
     mask = depth_abs <= c
     depth_loss = ((mask * depth_abs).sum() +

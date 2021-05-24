@@ -5,13 +5,15 @@ You can download pretrained DeepLabV3 weights from <https://github.com/VainF/Dee
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=0 python V2/train_base.py \
-        --dataset-name photomatte85 \
+    CUDA_VISIBLE_DEVICES=0,1 python3 train_base.py \
+        --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name custom \
-        --model-last-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth" \
+        --model-name mattingbase-resnet50-MiDas-videomatte240k \
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-resnet50-MiDas-depth-1/epoch-1.pth" \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
+        --log-train-images-interval 200 \
         --epoch-end 10
+        --num-workers 8
 
 """
 
@@ -37,7 +39,7 @@ from V2wd.dataset import ImagesDataset, ZipDataset, VideoDataset, SampleDataset
 from V2wd.dataset import augmentation as A
 from V2wd.model.model import MattingBase
 from V2wd.model.utils import load_matched_state_dict
-from depth_estimator import Midas_depth
+from depth_estimator import Midas_depth, Normalize
 import numpy as np
 
 
@@ -235,16 +237,27 @@ def train():
                     pred_fgr * pred_pha, nrow=5), step)
                 writer.add_image('train_pred_err',
                                  make_grid(pred_err, nrow=5), step)
+                white = 255 * \
+                    torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
+                        Normalize(pred_depth))
+                writer.add_image('train_pred_depth',
+                                 make_grid(white.to(torch.uint8), nrow=5), step)
                 writer.add_image('train_true_src',
                                  make_grid(true_src, nrow=5), step)
                 writer.add_image('train_true_bgr',
                                  make_grid(true_bgr, nrow=5), step)
+                white = 255 * \
+                    torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
+                        Normalize(true_depth))
+                writer.add_image('train_true_depth',
+                                 make_grid(white.to(torch.uint8), nrow=5), step)
 
-            del true_pha, true_fgr, true_bgr
-            del pred_pha, pred_fgr, pred_err
+            del true_pha, true_fgr, true_bgr, true_depth
+            del pred_pha, pred_fgr, pred_err, pred_depth
 
             if (i + 1) % args.log_valid_interval == 0:
-                valid(model, dataloader_valid, writer, step)
+                # valid(model, dataloader_valid, writer, step)
+                pass
 
             if (step + 1) % args.checkpoint_interval == 0:
                 torch.save(model.state_dict(
@@ -265,13 +278,14 @@ def compute_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor, pred_err: torch
         F.l1_loss(kornia.sobel(pred_pha), kornia.sobel(true_pha)) + \
         F.l1_loss(pred_fgr * true_msk, true_fgr * true_msk) + \
         F.mse_loss(pred_err, true_err)
-    depth_abs = (pred_depth-true_depth).abs()
+    true_depth = true_depth.detach()
+    depth_abs = (pred_depth-true_depth).abs() * (true_depth >= 0)
     c = depth_abs.max() / 5
     mask = depth_abs <= c
     depth_loss = ((mask * depth_abs).sum() +
                   ((~mask * depth_abs) ** 2 + c ** 2).sum() / (2*c)) / (mask.shape[2] * mask.shape[3])
 
-    return 0 + depth_loss
+    return 30 * matting_loss + depth_loss
 
 
 def random_crop(*imgs):

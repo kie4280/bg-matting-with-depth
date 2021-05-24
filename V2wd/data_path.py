@@ -27,8 +27,8 @@ DATA_PATH = {
             'pha': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/train/pha'
         },
         'valid': {
-            'fgr': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/test/fgr',
-            'pha': '/eva_data/kie/data/training/VideoMatte240K_JPEG_HD/test/pha'
+            'fgr': '/eva_data/kie/data/training/foreground',
+            'pha': '/eva_data/kie/data/training/alpha'
         }
     },
     'photomatte85': {
@@ -70,7 +70,7 @@ DATA_PATH = {
         },
     },
     'backgrounds': {
-        'train': '/eva_data/kie/data/training/background/custom',
+        'train': '/eva_data/kie/data/training/videos/output',
         'valid': '/eva_data/kie/data/validate/background'
     },
 }

@@ -5,6 +5,8 @@
         "training",
         "V2",
         "V2/model",
+        "V2wd",
+        "V2wd/model",
         "MiDas",
         "MiDas/midas"
     ],
@@ -15,6 +17,8 @@
         "training",
         "V2",
         "V2/model",
+        "V2wd",
+        "V2wd/model",
         "MiDas",
         "MiDas/midas"
     ],

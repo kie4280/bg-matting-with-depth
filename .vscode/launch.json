@@ -65,20 +65,20 @@
             "args": []
         },
         {
-            "name": "Python: training",
+            "name": "Python: train base",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/V2/train_base.py",
+            "program": "${workspaceFolder}/train_base.py",
             "console": "integratedTerminal",
             "args": [
                 "--dataset-name",
-                "photomatte85",
+                "videomatte240k",
                 "--model-backbone",
                 "resnet50",
                 "--model-name",
-                "mattingbase-resnet50-photomatte85-custom",
+                "mattingbase-resnet50-MiDas-videomatte240k",
                 "--model-last-checkpoint",
-                "/eva_data/kie/research/pretrained/V2-model.pth",
+                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-resnet50-MiDas-depth-1/epoch-1.pth",
                 "--model-pretrain-initialization",
                 "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth",
                 "--epoch-end",
@@ -87,7 +87,7 @@
                 "8"
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "1"
+                "CUDA_VISIBLE_DEVICES": "0,1"
             }
         },
         {
