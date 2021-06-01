@@ -3,14 +3,14 @@ Inference images: Extract matting on images.
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=0 python3 validate.py \
+    CUDA_VISIBLE_DEVICES=0 python3 validate_old.py \
         --dataset-name "photomatte85" \
         --model-type mattingbase \
         --model-backbone resnet50 \
         --model-backbone-scale 0.25 \
         --model-refine-mode sampling \
         --model-refine-sample-pixels 80000 \
-        --model-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-1/epoch-9.pth" \
+        --model-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth"
 
 
 """
@@ -27,11 +27,11 @@ from torchvision import transforms as T
 from tqdm import tqdm
 from torch.nn import functional as F
 
-from V2wd.dataset import ImagesDataset, ZipDataset
-from V2wd.data_path import DATA_PATH
-from V2wd.dataset import augmentation as A
-from V2wd.model import MattingBase, MattingRefine
-from V2wd.inference_utils import HomographicAlignment
+from V2.dataset import ImagesDataset, ZipDataset
+from V2.data_path import DATA_PATH
+from V2.dataset import augmentation as A
+from V2.model import MattingBase, MattingRefine
+from V2.inference_utils import HomographicAlignment
 
 
 # --------------- Arguments ---------------

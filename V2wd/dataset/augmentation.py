@@ -41,7 +41,7 @@ class PairApplyOnlyAtIndices:
 
 class PairRandomAffine(T.RandomAffine):
     def __init__(self, degrees, translate=None, scale=None, shear=None, resamples=None, fillcolor=0):
-        super().__init__(degrees, translate, scale, shear, Image.NEAREST, fillcolor)
+        super().__init__(degrees, translate, scale, shear, F.InterpolationMode.NEAREST, fillcolor)
         self.resamples = resamples
     
     def __call__(self, *x):
@@ -98,7 +98,7 @@ class PairRandomSharpen(RandomSharpen):
     
 
 class PairRandomAffineAndResize:
-    def __init__(self, size, degrees, translate, scale, shear, ratio=(3./4., 4./3.), resample=Image.BILINEAR, fillcolor=0):
+    def __init__(self, size, degrees, translate, scale, shear, ratio=(3./4., 4./3.), resample=F.InterpolationMode.BILINEAR, fillcolor=0):
         self.size = size
         self.degrees = degrees
         self.translate = translate

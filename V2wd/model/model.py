@@ -186,15 +186,16 @@ class MattingRefine(MattingBase):
         pha_sm = x[:, 0:1].clamp_(0., 1.)
         fgr_sm = x[:, 1:4]
         err_sm = x[:, 4:5].clamp_(0., 1.)
-        hid_sm = x[:, 5:].relu_()
+        hid_sm = x[:, 5:37].relu_()
+        depth_sm = x[:, 37:]
 
         # Refiner
         pha, fgr, ref_sm = self.refiner(
-            src, bgr, pha_sm, fgr_sm, err_sm, hid_sm)
+            src, bgr, pha_sm, fgr_sm, err_sm, hid_sm, depth_sm)
 
         # Clamp outputs
         pha = pha.clamp_(0., 1.)
         fgr = fgr.add_(src).clamp_(0., 1.)
         fgr_sm = src_sm.add_(fgr_sm).clamp_(0., 1.)
 
-        return pha, fgr, pha_sm, fgr_sm, err_sm, ref_sm
+        return pha, fgr, pha_sm, fgr_sm, err_sm, ref_sm, depth_sm

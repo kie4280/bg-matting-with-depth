@@ -8,8 +8,8 @@ Example:
     CUDA_VISIBLE_DEVICES=0,1 python3 train_base.py \
         --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name mattingbase-resnet50-MiDas-videomatte240k \
-        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-resnet50-MiDas-depth-1/epoch-1.pth" \
+        --model-name mattingbase-videomatte240k-campus-2 \
+        --model-last-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth" \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
         --log-train-images-interval 200 \
         --epoch-end 10
@@ -24,7 +24,6 @@ import os
 import random
 
 from torch import nn
-from torch.nn import functional as F
 from torch.cuda.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
@@ -39,6 +38,7 @@ from V2wd.dataset import ImagesDataset, ZipDataset, VideoDataset, SampleDataset
 from V2wd.dataset import augmentation as A
 from V2wd.model.model import MattingBase
 from V2wd.model.utils import load_matched_state_dict
+import V2wd.loss as LOSS
 from depth_estimator import Midas_depth, Normalize
 import numpy as np
 
@@ -217,8 +217,10 @@ def train():
             with autocast():
                 pred_pha, pred_fgr, pred_err, _, pred_depth = model(
                     true_src, true_bgr)
-                loss = compute_loss(
-                    pred_pha, pred_fgr, pred_err, pred_depth, true_pha, true_fgr, true_depth)
+                matting_loss = LOSS.compute_mattingbase_loss(
+                    pred_pha, pred_fgr, pred_err, true_pha, true_fgr)
+                depth_loss = LOSS.compute_depth_loss(pred_depth, true_depth)
+                loss = matting_loss + depth_loss / 30
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -227,6 +229,8 @@ def train():
 
             if (i + 1) % args.log_train_loss_interval == 0:
                 writer.add_scalar('loss', loss, step)
+                writer.add_scalar('matting loss', matting_loss, step)
+                writer.add_scalar('depth loss', depth_loss, step)
 
             if (i + 1) % args.log_train_images_interval == 0:
                 writer.add_image('train_pred_pha',
@@ -256,7 +260,7 @@ def train():
             del pred_pha, pred_fgr, pred_err, pred_depth
 
             if (i + 1) % args.log_valid_interval == 0:
-                # valid(model, dataloader_valid, writer, step)
+                valid(model, dataloader_valid, writer, step)
                 pass
 
             if (step + 1) % args.checkpoint_interval == 0:
@@ -272,20 +276,12 @@ def train():
 
 def compute_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor, pred_err: torch.Tensor, pred_depth: torch.Tensor,
                  true_pha: torch.Tensor, true_fgr: torch.Tensor, true_depth: torch.Tensor):
-    true_err = torch.abs(pred_pha.detach() - true_pha)
-    true_msk = true_pha != 0
-    matting_loss = F.l1_loss(pred_pha, true_pha) + \
-        F.l1_loss(kornia.sobel(pred_pha), kornia.sobel(true_pha)) + \
-        F.l1_loss(pred_fgr * true_msk, true_fgr * true_msk) + \
-        F.mse_loss(pred_err, true_err)
-    true_depth = true_depth.detach()
-    depth_abs = (pred_depth-true_depth).abs() * (true_depth >= 0)
-    c = depth_abs.max() / 5
-    mask = depth_abs <= c
-    depth_loss = ((mask * depth_abs).sum() +
-                  ((~mask * depth_abs) ** 2 + c ** 2).sum() / (2*c)) / (mask.shape[2] * mask.shape[3])
+   
+    matting_loss = LOSS.compute_mattingbase_loss(
+        pred_pha, pred_fgr, pred_err, true_pha, true_fgr)
+    depth_loss = LOSS.compute_depth_loss(pred_depth, true_depth)
 
-    return 30 * matting_loss + depth_loss
+    return matting_loss + depth_loss / 30
 
 
 def random_crop(*imgs):
@@ -312,9 +308,13 @@ def valid(model, dataloader, writer, step):
             true_bgr = true_bgr.cuda(non_blocking=True)
             true_src = true_pha * true_fgr + (1 - true_pha) * true_bgr
 
-            pred_pha, pred_fgr, pred_err = model(true_src, true_bgr)[:3]
+            depth_input = true_src.cpu().numpy()
+            depth_input = np.moveaxis(depth_input, 1, -1)
+            true_depth = MD.inference(depth_input).cuda("cuda:0")
+
+            pred_pha, pred_fgr, pred_err, _, pred_depth = model(true_src, true_bgr)
             loss = compute_loss(pred_pha, pred_fgr,
-                                pred_err, true_pha, true_fgr)
+                                pred_err, pred_depth, true_pha, true_fgr, true_depth)
             loss_total += loss.cpu().item() * batch_size
             loss_count += batch_size
 

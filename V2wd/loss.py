@@ -1,6 +1,6 @@
 import torch
 import kornia
-import torch.functional as F
+from torch.nn import functional as F
 
 
 def compute_depth_loss(pred_depth: torch.Tensor, true_depth: torch.Tensor):

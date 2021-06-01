@@ -91,6 +91,32 @@
             }
         },
         {
+            "name": "Python: train refine",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/train_refine.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--dataset-name",
+                "videomatte240k",
+                "--model-backbone",
+                "resnet50",
+                "--model-name",
+                "mattingrefine-depth-1",
+                "--model-last-checkpoint",
+                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-2/epoch-9.pth",
+                "--epoch-end",
+                "10",
+                "--num-workers",
+                "8",
+                "--batch-size",
+                "4"
+            ],
+            "env": {
+                "CUDA_VISIBLE_DEVICES": "0,1"
+            }
+        },
+        {
             "name": "Python: validate",
             "type": "python",
             "request": "launch",

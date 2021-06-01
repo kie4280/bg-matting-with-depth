@@ -9,9 +9,9 @@ Example:
     CUDA_VISIBLE_DEVICES=0,1 python3 train_refine.py \
         --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name mattingrefine-depth \
-        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-1/epoch-9.pth" \
-        --epoch-end 8\
+        --model-name mattingrefine-depth-1 \
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-2/epoch-9.pth" \
+        --epoch-end 4\
         --batch-size 4\
         --log-train-images-interval 200
 
@@ -43,6 +43,7 @@ from V2wd.model import MattingRefine
 from V2wd import loss as LOSS
 from V2wd.model.utils import load_matched_state_dict
 from depth_estimator import Midas_depth, Normalize
+import numpy as np
 
 
 # --------------- Arguments ---------------
@@ -85,8 +86,12 @@ assert args.batch_size % distributed_num_gpus == 0
 
 # --------------- Main ---------------
 
-def train_worker(rank, addr, port):
+MD = None
 
+
+def train_worker(rank, addr, port):
+    global MD
+    MD = Midas_depth(device="cuda:{}".format(rank))
     # Distributed Setup
     os.environ['MASTER_ADDR'] = addr
     os.environ['MASTER_PORT'] = port
@@ -223,6 +228,17 @@ def train_worker(rank, addr, port):
                     true_bgr[aug_noise_idx]).mul_(0.03 * random.random())).clamp_(0, 1)
             del aug_noise_idx
 
+            # feed into MiDas for depth estimate
+
+            depth_input = true_src.cpu().numpy()
+            depth_input = np.moveaxis(depth_input, 1, -1)
+            true_depth = MD.inference(depth_input)
+            true_depth = F.interpolate(true_depth,
+                                       scale_factor=args.model_backbone_scale,
+                                       mode='bilinear',
+                                       align_corners=False,
+                                       recompute_scale_factor=True)
+
             # Augment background with jitter
             aug_jitter_idx = torch.rand(len(true_src)) < 0.8
             if aug_jitter_idx.any():
@@ -238,11 +254,12 @@ def train_worker(rank, addr, port):
             del aug_affine_idx
 
             with autocast():
-                pred_pha, pred_fgr, pred_pha_sm, pred_fgr_sm, pred_err_sm, _ = model_distributed(
+                pred_pha, pred_fgr, pred_pha_sm, pred_fgr_sm, pred_err_sm, _, pred_depth_sm = model_distributed(
                     true_src, true_bgr)
                 loss = LOSS.compute_mattingrefine_loss(
                     pred_pha, pred_fgr, pred_pha_sm,
-                    pred_fgr_sm, pred_err_sm, true_pha, true_fgr)
+                    pred_fgr_sm, pred_err_sm, true_pha, true_fgr) + \
+                    LOSS.compute_depth_loss(pred_depth_sm, true_depth) / 30
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -261,21 +278,16 @@ def train_worker(rank, addr, port):
                     writer.add_image('train_pred_com', make_grid(
                         pred_fgr * pred_pha, nrow=5), step)
                     writer.add_image('train_pred_err',
-                                     make_grid(pred_err, nrow=5), step)
-                    white = 255 * \
-                        torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
-                            Normalize(pred_depth))
+                                     make_grid((255 * pred_err_sm).to(torch.uint8), nrow=5), step)
                     writer.add_image('train_pred_depth',
-                                     make_grid(white.to(torch.uint8), nrow=5), step)
+                                     make_grid((255 * Normalize(pred_depth_sm)).to(torch.uint8), nrow=5), step)
                     writer.add_image('train_true_src',
                                      make_grid(true_src, nrow=5), step)
                     writer.add_image('train_true_bgr',
                                      make_grid(true_bgr, nrow=5), step)
-                    white = 255 * \
-                        torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
-                            Normalize(true_depth))
+
                     writer.add_image('train_true_depth',
-                                     make_grid(white.to(torch.uint8), nrow=5), step)
+                                     make_grid((255 * Normalize(true_depth)).to(torch.uint8), nrow=5), step)
 
                 del true_pha, true_fgr, true_src, true_bgr
                 del pred_pha, pred_fgr, pred_pha_sm, pred_fgr_sm, pred_err_sm
@@ -324,12 +336,21 @@ def valid(model, dataloader, writer, step):
             true_bgr = true_bgr.cuda(non_blocking=True)
             true_src = true_pha * true_fgr + (1 - true_pha) * true_bgr
 
-            pred_pha, pred_fgr, pred_pha_sm, pred_fgr_sm, pred_err_sm, _ = model(
+            depth_input = true_src.cpu().numpy()
+            depth_input = np.moveaxis(depth_input, 1, -1)
+            true_depth = MD.inference(depth_input)
+            true_depth = F.interpolate(true_depth,
+                                       scale_factor=args.model_backbone_scale,
+                                       mode='bilinear',
+                                       align_corners=False,
+                                       recompute_scale_factor=True)
+            pred_pha, pred_fgr, pred_pha_sm, pred_fgr_sm, pred_err_sm, _, pred_depth_sm = model(
                 true_src, true_bgr)
             loss = LOSS.compute_mattingrefine_loss(
                 pred_pha, pred_fgr,
                 pred_pha_sm, pred_fgr_sm,
-                pred_err_sm, true_pha, true_fgr)
+                pred_err_sm, true_pha, true_fgr) + \
+                LOSS.compute_depth_loss(pred_depth_sm, true_depth) / 30
             loss_total += loss.cpu().item() * batch_size
             loss_count += batch_size
 
