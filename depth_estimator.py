@@ -96,9 +96,17 @@ class Midas_depth:
 
 
 def Normalize(depth_tensor: torch.Tensor) -> torch.Tensor:
-    max_d = depth_tensor.max()
-    min_d = depth_tensor.min()
-    norm = (depth_tensor - min_d) / (max_d - min_d)
+    norm = torch.empty_like(depth_tensor)
+    if len(depth_tensor.shape) == 4:
+        for i in range(depth_tensor.shape[0]):
+            sub_tensor = depth_tensor.select(0, i)
+            max_d = sub_tensor.max()
+            min_d = sub_tensor.min()
+            norm[i,:,:,:] = (sub_tensor - min_d) / (max_d - min_d)
+    else:
+        max_d = depth_tensor.max()
+        min_d = depth_tensor.min()
+        norm = (depth_tensor - min_d) / (max_d - min_d)
     return norm
 
 
@@ -109,7 +117,7 @@ if __name__ == "__main__":
     output = MD.inference(img).squeeze_(dim=0)
 
     white = 255 * torch.ones([3, output.shape[1], output.shape[2]],
-                       dtype=torch.float32, device='cuda:1')
+                             dtype=torch.float32, device='cuda:1')
     output = Normalize(output) * white
     output = output.moveaxis(0, -1)
     cv2.imwrite("test.png", output.to(torch.uint8).cpu().numpy())

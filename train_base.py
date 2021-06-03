@@ -8,11 +8,11 @@ Example:
     CUDA_VISIBLE_DEVICES=0,1 python3 train_base.py \
         --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name mattingbase-videomatte240k-campus-2 \
-        --model-last-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth" \
+        --model-name mattingbase-videomatte240k-house-1 \
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-house-1/epoch-0-iter-9999.pth" \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
         --log-train-images-interval 200 \
-        --epoch-end 10
+        --epoch-end 10\
         --num-workers 8
 
 """
@@ -220,7 +220,7 @@ def train():
                 matting_loss = LOSS.compute_mattingbase_loss(
                     pred_pha, pred_fgr, pred_err, true_pha, true_fgr)
                 depth_loss = LOSS.compute_depth_loss(pred_depth, true_depth)
-                loss = matting_loss + depth_loss / 30
+                loss = 10 * matting_loss + depth_loss
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -240,21 +240,17 @@ def train():
                 writer.add_image('train_pred_com', make_grid(
                     pred_fgr * pred_pha, nrow=5), step)
                 writer.add_image('train_pred_err',
-                                 make_grid(pred_err, nrow=5), step)
-                white = 255 * \
-                    torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
-                        Normalize(pred_depth))
+                                 make_grid((255*pred_err).to(torch.uint8), nrow=5), step)
+               
                 writer.add_image('train_pred_depth',
-                                 make_grid(white.to(torch.uint8), nrow=5), step)
+                                 make_grid((255 * Normalize(pred_depth)).to(torch.uint8), nrow=5), step)
                 writer.add_image('train_true_src',
                                  make_grid(true_src, nrow=5), step)
                 writer.add_image('train_true_bgr',
                                  make_grid(true_bgr, nrow=5), step)
-                white = 255 * \
-                    torch.ones_like(true_src, device='cuda:0', dtype=torch.float32).mul(
-                        Normalize(true_depth))
+                
                 writer.add_image('train_true_depth',
-                                 make_grid(white.to(torch.uint8), nrow=5), step)
+                                 make_grid((255 * Normalize(true_depth)).to(torch.uint8), nrow=5), step)
 
             del true_pha, true_fgr, true_bgr, true_depth
             del pred_pha, pred_fgr, pred_err, pred_depth
@@ -281,7 +277,7 @@ def compute_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor, pred_err: torch
         pred_pha, pred_fgr, pred_err, true_pha, true_fgr)
     depth_loss = LOSS.compute_depth_loss(pred_depth, true_depth)
 
-    return matting_loss + depth_loss / 30
+    return 10 * matting_loss + depth_loss
 
 
 def random_crop(*imgs):

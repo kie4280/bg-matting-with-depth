@@ -3,18 +3,18 @@ Inference video: Extract matting on video.
 
 Example:
 
-    python3 V2wd/inference_video.py \
-        --model-type mattingrefine \
+    CUDA_VISIBLE_DEVICES=1 python3 inference_video.py \
+        --model-type mattingbase \
         --model-backbone resnet50 \
         --model-backbone-scale 0.25 \
         --model-refine-mode sampling \
         --model-refine-sample-pixels 80000 \
-        --model-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingrefine-depth-1/epoch-0.pth" \
-        --video-src "/eva_data/kie/personal_data/fast_moving.MOV" \
-        --video-bgr "/eva_data/kie/personal_data/fast_moving_bgr.png" \
+        --model-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-forest-lib/epoch-2.pth" \
+        --video-src "/eva_data/kie/personal_data/trees.MOV" \
+        --video-bgr "/eva_data/kie/personal_data/trees_bgr.png" \
         --video-resize 1080 1920 \
         --output-dir "/eva_data/kie/output" \
-        --output-type com fgr pha err ref
+        --output-type com fgr pha depth
 
 """
 
@@ -33,10 +33,11 @@ from threading import Thread
 from tqdm import tqdm
 from PIL import Image
 
-from dataset import VideoDataset, ZipDataset
-from dataset import augmentation as A
-from model import MattingBase, MattingRefine
-from inference_utils import HomographicAlignment
+from V2wd.dataset import VideoDataset, ZipDataset
+from V2wd.dataset import augmentation as A
+from V2wd.model import MattingBase, MattingRefine
+from V2wd.inference_utils import HomographicAlignment
+from depth_estimator import Normalize
 
 
 # --------------- Arguments ---------------
@@ -62,7 +63,7 @@ parser.add_argument('--device', type=str, choices=['cpu', 'cuda'], default='cuda
 parser.add_argument('--preprocess-alignment', action='store_true')
 
 parser.add_argument('--output-dir', type=str, required=True)
-parser.add_argument('--output-types', type=str, required=True, nargs='+', choices=['com', 'pha', 'fgr', 'err', 'ref'])
+parser.add_argument('--output-types', type=str, required=True, nargs='+', choices=['com', 'pha', 'fgr', 'err', 'ref', 'depth'])
 parser.add_argument('--output-format', type=str, default='video', choices=['video', 'image_sequences'])
 
 args = parser.parse_args()
@@ -163,6 +164,8 @@ if args.output_format == 'video':
         err_writer = VideoWriter(os.path.join(args.output_dir, 'err.mp4'), vid.frame_rate, w, h)
     if 'ref' in args.output_types:
         ref_writer = VideoWriter(os.path.join(args.output_dir, 'ref.mp4'), vid.frame_rate, w, h)
+    if 'depth' in args.output_types:
+        ref_writer = VideoWriter(os.path.join(args.output_dir, 'depth.mp4'), vid.frame_rate, w, h)
 else:
     if 'com' in args.output_types:
         com_writer = ImageSequenceWriter(os.path.join(args.output_dir, 'com'), 'png')
@@ -189,9 +192,9 @@ with torch.no_grad():
         bgr = bgr.to(device, non_blocking=True)
         
         if args.model_type == 'mattingbase':
-            pha, fgr, err, _ = model(src, bgr)
+            pha, fgr, err, _, depth = model(src, bgr)
         elif args.model_type == 'mattingrefine':
-            pha, fgr, _, _, err, ref = model(src, bgr)
+            pha, fgr, _, _, err, ref, _ = model(src, bgr)
         elif args.model_type == 'mattingbm':
             pha, fgr = model(src, bgr)
 
@@ -212,3 +215,5 @@ with torch.no_grad():
             err_writer.add_batch(F.interpolate(err, src.shape[2:], mode='bilinear', align_corners=False))
         if 'ref' in args.output_types:
             ref_writer.add_batch(F.interpolate(ref, src.shape[2:], mode='nearest'))
+        if 'depth' in args.output_types:
+            ref_writer.add_batch(F.interpolate(Normalize(depth), src.shape[2:], mode='nearest'))

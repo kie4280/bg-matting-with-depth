@@ -5,11 +5,11 @@
             "name": "Python: inference video",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/V2/inference_video.py",
+            "program": "${workspaceFolder}/inference_video.py",
             "console": "integratedTerminal",
             "args": [
                 "--model-type",
-                "mattingrefine",
+                "mattingbase",
                 "--model-backbone",
                 "resnet50",
                 "--model-backbone-scale",
@@ -19,21 +19,25 @@
                 "--model-refine-sample-pixels",
                 "80000",
                 "--model-checkpoint",
-                "/home/kie/research/BGMwd/checkpoint/mattingrefine/epoch-7.pth",
+                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-2/epoch-9.pth",
                 "--video-src",
-                "/home/kie/personal_data/far.MOV",
+                "/eva_data/kie/personal_data/IMG_0153.MOV",
                 "--video-bgr",
-                "/home/kie/personal_data/far_bgr.png",
+                "/eva_data/kie/personal_data/IMG_0153_bgr.png",
                 "--output-dir",
-                "/home/kie/output",
+                "/eva_data/kie/output",
                 "--output-type",
                 "com",
                 "fgr",
                 "pha",
                 "err",
+                "depth",
+                "--video-resize",
+                "1920",
+                "1080"
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0,1"
+                "CUDA_VISIBLE_DEVICES": "1"
             }
         },
         {
