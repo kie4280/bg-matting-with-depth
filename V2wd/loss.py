@@ -5,12 +5,14 @@ from torch.nn import functional as F
 
 def compute_depth_loss(pred_depth: torch.Tensor, true_depth: torch.Tensor):
     true_depth = true_depth.detach()
-    depth_abs = (pred_depth-true_depth).abs() * (true_depth >= 0)
-    c = depth_abs.max() / 5
+    valid_mask = true_depth > 0
+    depth_abs = (pred_depth-true_depth).abs() * valid_mask
+    c = depth_abs.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0] / 5
     mask = depth_abs <= c
     depth_loss = ((mask * depth_abs).sum() +
-                  ((~mask * depth_abs) ** 2 + c ** 2).sum() / (2*c)) / (mask.shape[2] * mask.shape[3])
-    return depth_loss
+                  ((~mask * depth_abs) ** 2 + c ** 2).sum() / (2*c + 1e-7)) / (
+                      valid_mask.sum(dtype=torch.float32) + 1e-7)
+    return depth_loss.sum()
 
 
 def compute_mattingbase_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor,

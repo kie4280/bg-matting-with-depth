@@ -5,15 +5,17 @@ You can download pretrained DeepLabV3 weights from <https://github.com/VainF/Dee
 
 Example:
 
-    CUDA_VISIBLE_DEVICES=0,1 python3 train_base.py \
+    CUDA_VISIBLE_DEVICES=1 python3 train_base.py \
         --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name mattingbase-videomatte240k-house-1 \
-        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-house-1/epoch-0-iter-9999.pth" \
+        --model-name mattingbase-videomatte240k-house-2 \
+        --model-last-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth" \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
         --log-train-images-interval 200 \
         --epoch-end 10\
-        --num-workers 8
+        --num-workers 8\
+        --batch-size 6
+
 
 """
 
@@ -73,7 +75,7 @@ args = parser.parse_args()
 
 # --------------- Loading ---------------
 
-MD = Midas_depth()
+MD = Midas_depth(device="cuda:0")
 
 
 def train():
@@ -220,7 +222,7 @@ def train():
                 matting_loss = LOSS.compute_mattingbase_loss(
                     pred_pha, pred_fgr, pred_err, true_pha, true_fgr)
                 depth_loss = LOSS.compute_depth_loss(pred_depth, true_depth)
-                loss = 10 * matting_loss + depth_loss
+                loss = matting_loss + depth_loss / 30
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -241,14 +243,14 @@ def train():
                     pred_fgr * pred_pha, nrow=5), step)
                 writer.add_image('train_pred_err',
                                  make_grid((255*pred_err).to(torch.uint8), nrow=5), step)
-               
+
                 writer.add_image('train_pred_depth',
                                  make_grid((255 * Normalize(pred_depth)).to(torch.uint8), nrow=5), step)
                 writer.add_image('train_true_src',
                                  make_grid(true_src, nrow=5), step)
                 writer.add_image('train_true_bgr',
                                  make_grid(true_bgr, nrow=5), step)
-                
+
                 writer.add_image('train_true_depth',
                                  make_grid((255 * Normalize(true_depth)).to(torch.uint8), nrow=5), step)
 
@@ -272,12 +274,12 @@ def train():
 
 def compute_loss(pred_pha: torch.Tensor, pred_fgr: torch.Tensor, pred_err: torch.Tensor, pred_depth: torch.Tensor,
                  true_pha: torch.Tensor, true_fgr: torch.Tensor, true_depth: torch.Tensor):
-   
+
     matting_loss = LOSS.compute_mattingbase_loss(
         pred_pha, pred_fgr, pred_err, true_pha, true_fgr)
     depth_loss = LOSS.compute_depth_loss(pred_depth, true_depth)
 
-    return 10 * matting_loss + depth_loss
+    return matting_loss + depth_loss / 30
 
 
 def random_crop(*imgs):
@@ -308,7 +310,8 @@ def valid(model, dataloader, writer, step):
             depth_input = np.moveaxis(depth_input, 1, -1)
             true_depth = MD.inference(depth_input).cuda("cuda:0")
 
-            pred_pha, pred_fgr, pred_err, _, pred_depth = model(true_src, true_bgr)
+            pred_pha, pred_fgr, pred_err, _, pred_depth = model(
+                true_src, true_bgr)
             loss = compute_loss(pred_pha, pred_fgr,
                                 pred_err, pred_depth, true_pha, true_fgr, true_depth)
             loss_total += loss.cpu().item() * batch_size

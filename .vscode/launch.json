@@ -9,7 +9,7 @@
             "console": "integratedTerminal",
             "args": [
                 "--model-type",
-                "mattingbase",
+                "mattingrefine",
                 "--model-backbone",
                 "resnet50",
                 "--model-backbone-scale",
@@ -19,7 +19,7 @@
                 "--model-refine-sample-pixels",
                 "80000",
                 "--model-checkpoint",
-                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-2/epoch-9.pth",
+                "/eva_data/kie/research/BGMwd/checkpoint/mattingrefine-depth-1/epoch-0.pth",
                 "--video-src",
                 "/eva_data/kie/personal_data/IMG_0153.MOV",
                 "--video-bgr",
@@ -37,7 +37,7 @@
                 "1080"
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "1"
+                "CUDA_VISIBLE_DEVICES": "0"
             }
         },
         {
@@ -80,9 +80,9 @@
                 "--model-backbone",
                 "resnet50",
                 "--model-name",
-                "mattingbase-resnet50-MiDas-videomatte240k",
+                "mattingbase-videomatte240k-house-1",
                 "--model-last-checkpoint",
-                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-resnet50-MiDas-depth-1/epoch-1.pth",
+                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-house-1/epoch-2-iter-74999.pth",
                 "--model-pretrain-initialization",
                 "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth",
                 "--epoch-end",
@@ -91,7 +91,7 @@
                 "8"
             ],
             "env": {
-                "CUDA_VISIBLE_DEVICES": "0,1"
+                "CUDA_VISIBLE_DEVICES": "0"
             }
         },
         {

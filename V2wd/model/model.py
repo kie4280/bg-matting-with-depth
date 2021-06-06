@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch import tensor
 from torch.nn import functional as F
 from torchvision.models.segmentation.deeplabv3 import ASPP
 
@@ -160,6 +161,7 @@ class MattingRefine(MattingBase):
                                refine_prevent_oversampling,
                                refine_patch_crop_method,
                                refine_patch_replace_method)
+        self._bg_depth = None
 
     def forward(self, src, bgr):
         assert src.size() == bgr.size(), 'src and bgr must have the same shape'
@@ -188,6 +190,13 @@ class MattingRefine(MattingBase):
         err_sm = x[:, 4:5].clamp_(0., 1.)
         hid_sm = x[:, 5:37].relu_()
         depth_sm = x[:, 37:]
+        
+        if self._bg_depth != None:
+            dep = (depth_sm - self._bg_depth)
+            exp = torch.exp(depth_sm)
+            err_sm = ((dep > 0) * err_sm) * exp
+            
+            
 
         # Refiner
         pha, fgr, ref_sm = self.refiner(
@@ -199,3 +208,6 @@ class MattingRefine(MattingBase):
         fgr_sm = src_sm.add_(fgr_sm).clamp_(0., 1.)
 
         return pha, fgr, pha_sm, fgr_sm, err_sm, ref_sm, depth_sm
+
+    def set_bg(self, bg_depth:torch.Tensor):
+        self._bg_depth = bg_depth
