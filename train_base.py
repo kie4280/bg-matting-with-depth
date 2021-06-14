@@ -8,8 +8,8 @@ Example:
     CUDA_VISIBLE_DEVICES=1 python3 train_base.py \
         --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name mattingbase-videomatte240k-house-2 \
-        --model-last-checkpoint "/eva_data/kie/research/pretrained/V2-model.pth" \
+        --model-name with-pedestrian \
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-house-2/epoch-9.pth" \
         --model-pretrain-initialization "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth" \
         --log-train-images-interval 200 \
         --epoch-end 10\
@@ -21,11 +21,13 @@ Example:
 
 import argparse
 import kornia
+from numpy.lib.index_tricks import nd_grid
 import torch
 import os
 import random
 
 from torch import nn
+from torch import tensor
 from torch.cuda.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
@@ -43,6 +45,7 @@ from V2wd.model.utils import load_matched_state_dict
 import V2wd.loss as LOSS
 from depth_estimator import Midas_depth, Normalize
 import numpy as np
+import cv2
 
 
 # --------------- Arguments ---------------
@@ -97,6 +100,19 @@ def train():
                 [1], T.ColorJitter(0.15, 0.15, 0.15, 0.05)),
             A.PairApply(T.ToTensor())
         ]), assert_equal_length=True),
+        ZipDataset([
+            ImagesDataset(DATA_PATH[args.dataset_name]
+                          ['train']['pha'], mode='L'),
+            ImagesDataset(DATA_PATH[args.dataset_name]
+                          ['train']['fgr'], mode='RGB'),
+        ], transforms=A.PairCompose([
+            A.PairRandomAffineAndResize(
+                (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(0.1, 0.5), shear=(-5, 5)),
+            A.PairRandomHorizontalFlip(),
+            A.PairApplyOnlyAtIndices(
+                [1], T.ColorJitter(0.15, 0.15, 0.15, 0.05)),
+            A.PairApply(T.ToTensor())
+        ]), assert_equal_length=True, shuffle=True),
         ImagesDataset(DATA_PATH['backgrounds']['train'], transforms=T.Compose([
             A.RandomAffineAndResize(
                 (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 2), shear=(-5, 5)),
@@ -160,14 +176,16 @@ def train():
 
     # Run loop
     for epoch in range(args.epoch_start, args.epoch_end):
-        for i, ((true_pha, true_fgr), true_bgr) in enumerate(tqdm(dataloader_train)):
+        for i, ((true_pha, true_fgr), (p_mask, pedestrian), true_bgr) in enumerate(tqdm(dataloader_train)):
             step = epoch * len(dataloader_train) + i
 
             true_pha = true_pha.cuda(non_blocking=True)
             true_fgr = true_fgr.cuda(non_blocking=True)
             true_bgr = true_bgr.cuda(non_blocking=True)
-            true_pha, true_fgr, true_bgr = random_crop(
-                true_pha, true_fgr, true_bgr)
+            pedestrian = pedestrian.cuda(non_blocking=True)
+            p_mask = p_mask.cuda(non_blocking=True)
+            true_pha, true_fgr, true_bgr, pedestrian, p_mask = random_crop(
+                true_pha, true_fgr, true_bgr, pedestrian, p_mask)
 
             true_src = true_bgr.clone()
 
@@ -184,6 +202,12 @@ def train():
                     aug_shadow).clamp_(0, 1)
                 del aug_shadow
             del aug_shadow_idx
+
+            # Add pedestrain onto background
+            # pedestrian = kornia.center_crop(pedestrian, (255,255))
+
+            
+            true_src = pedestrian * p_mask + (1 - p_mask) * true_src
 
             # Composite foreground onto source
             true_src = true_fgr * true_pha + true_src * (1 - true_pha)

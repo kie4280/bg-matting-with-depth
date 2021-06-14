@@ -191,10 +191,10 @@ class MattingRefine(MattingBase):
         hid_sm = x[:, 5:37].relu_()
         depth_sm = x[:, 37:]
         
-        if self._bg_depth != None:
-            dep = (depth_sm - self._bg_depth)
-            mask = (dep > 0) * torch.exp(depth_sm)
-            err_sm = (mask * err_sm)
+        # if self._bg_depth != None:
+        #     dep = (depth_sm - self._bg_depth)
+        #     mask = (dep > 0) * torch.exp(depth_sm)
+        #     err_sm = (mask * err_sm)
             
 
         # Refiner

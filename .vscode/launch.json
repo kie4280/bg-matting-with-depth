@@ -80,15 +80,17 @@
                 "--model-backbone",
                 "resnet50",
                 "--model-name",
-                "mattingbase-videomatte240k-house-1",
+                "with-pedestrian",
                 "--model-last-checkpoint",
-                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-house-1/epoch-2-iter-74999.pth",
+                "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-house-2/epoch-9.pth",
                 "--model-pretrain-initialization",
                 "/home/kie/research/pretrained/best_deeplabv3_resnet50_voc_os16.pth",
                 "--epoch-end",
                 "10",
                 "--num-workers",
-                "8"
+                "8",
+                "--batch-size",
+                "6"
             ],
             "env": {
                 "CUDA_VISIBLE_DEVICES": "0"
