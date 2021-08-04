@@ -205,7 +205,6 @@ def train():
 
             # Add pedestrain onto background
             # pedestrian = kornia.center_crop(pedestrian, (255,255))
-
             
             true_src = pedestrian * p_mask + (1 - p_mask) * true_src
 

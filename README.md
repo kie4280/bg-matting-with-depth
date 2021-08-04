@@ -1,9 +1,10 @@
 # Extend the work of BackgroundMattingV2
 The original work is [here](https://github.com/PeterL1n/BackgroundMattingV2)  
-We use [Intel MiDaS](https://github.com/intel-isl/MiDaS) for our depth estimator
+We use [Intel MiDaS](https://github.com/intel-isl/MiDaS) as ground truth for training our own depth estimator
 
 ## Changes made
-* Add depth filter to the front and the end of the original model
+* Add a new depth channel to the end of the mattingbase decoder
+* Add random pedestrians to the video input so that the model can learn to use depth as a feature, not only relying on the background cues for matting.
 
 ## Inference
 ```

@@ -9,10 +9,10 @@ Example:
         --model-backbone-scale 0.25 \
         --model-refine-mode sampling \
         --model-refine-sample-pixels 80000 \
-        --model-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingrefine-depth-1/epoch-0.pth" \
-        --video-src "/eva_data/kie/personal_data/IMG_0153.MOV" \
-        --video-bgr "/eva_data/kie/personal_data/IMG_0153_bgr.png" \
-        --output-dir "/eva_data/kie/output" \
+        --model-checkpoint "CHECKPOINT_PATH" \
+        --video-src "VIDEO_INPUT" \
+        --video-bgr "VIDEO_BGR" \
+        --output-dir "OUTPUT_FOLDER" \
         --output-type com fgr pha depth depthdiff ref
 
 """

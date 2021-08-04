@@ -1,7 +1,0 @@
-medium_distance MOV
-close MOV
-far MOV
-fast_moving MOV
-IMG_0150 MOV
-IMG_0151 MOV
-IMG_0152 MOV

@@ -9,8 +9,8 @@ Example:
     CUDA_VISIBLE_DEVICES=0,1 python3 train_refine.py \
         --dataset-name videomatte240k \
         --model-backbone resnet50 \
-        --model-name mattingrefine-depth-1 \
-        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/mattingbase-videomatte240k-campus-2/epoch-9.pth" \
+        --model-name with-pedestrian-refine-2\
+        --model-last-checkpoint "/eva_data/kie/research/BGMwd/checkpoint/with-pedestrian-refine/epoch-1-iter-63999.pth" \
         --epoch-end 4\
         --batch-size 4\
         --log-train-images-interval 200
@@ -114,6 +114,19 @@ def train_worker(rank, addr, port):
                 [1], T.ColorJitter(0.15, 0.15, 0.15, 0.05)),
             A.PairApply(T.ToTensor())
         ]), assert_equal_length=True),
+        ZipDataset([
+            ImagesDataset(DATA_PATH[args.dataset_name]
+                          ['train']['pha'], mode='L'),
+            ImagesDataset(DATA_PATH[args.dataset_name]
+                          ['train']['fgr'], mode='RGB'),
+        ], transforms=A.PairCompose([
+            A.PairRandomAffineAndResize(
+                (512, 512), degrees=(-5, 5), translate=(0.1, 0.1), scale=(0.1, 0.5), shear=(-5, 5)),
+            A.PairRandomHorizontalFlip(),
+            A.PairApplyOnlyAtIndices(
+                [1], T.ColorJitter(0.15, 0.15, 0.15, 0.05)),
+            A.PairApply(T.ToTensor())
+        ]), assert_equal_length=True, shuffle=True),
         ImagesDataset(DATA_PATH['backgrounds']['train'], mode='RGB', transforms=T.Compose([
             A.RandomAffineAndResize(
                 (2048, 2048), degrees=(-5, 5), translate=(0.1, 0.1), scale=(1, 2), shear=(-5, 5)),
@@ -191,14 +204,16 @@ def train_worker(rank, addr, port):
 
     # Run loop
     for epoch in range(args.epoch_start, args.epoch_end):
-        for i, ((true_pha, true_fgr), true_bgr) in enumerate(tqdm(dataloader_train)):
+        for i, ((true_pha, true_fgr), (p_mask, pedestrian), true_bgr) in enumerate(tqdm(dataloader_train)):
             step = epoch * len(dataloader_train) + i
 
             true_pha = true_pha.to(rank, non_blocking=True)
             true_fgr = true_fgr.to(rank, non_blocking=True)
             true_bgr = true_bgr.to(rank, non_blocking=True)
-            true_pha, true_fgr, true_bgr = random_crop(
-                true_pha, true_fgr, true_bgr)
+            pedestrian = pedestrian.to(rank, non_blocking=True)
+            p_mask = p_mask.to(rank, non_blocking=True)
+            true_pha, true_fgr, true_bgr, pedestrian, p_mask = random_crop(
+                true_pha, true_fgr, true_bgr, pedestrian, p_mask)
 
             true_src = true_bgr.clone()
 
@@ -215,6 +230,12 @@ def train_worker(rank, addr, port):
                     aug_shadow).clamp_(0, 1)
                 del aug_shadow
             del aug_shadow_idx
+
+            # Add pedestrain onto background
+            # pedestrian = kornia.center_crop(pedestrian, (255,255))
+            
+            true_src = pedestrian * p_mask + (1 - p_mask) * true_src
+
 
             # Composite foreground onto source
             true_src = true_fgr * true_pha + true_src * (1 - true_pha)
@@ -256,10 +277,12 @@ def train_worker(rank, addr, port):
             with autocast():
                 pred_pha, pred_fgr, pred_pha_sm, pred_fgr_sm, pred_err_sm, _, pred_depth_sm = model_distributed(
                     true_src, true_bgr)
-                loss = LOSS.compute_mattingrefine_loss(
+                matting_loss = LOSS.compute_mattingrefine_loss(
                     pred_pha, pred_fgr, pred_pha_sm,
-                    pred_fgr_sm, pred_err_sm, true_pha, true_fgr) + \
-                    LOSS.compute_depth_loss(pred_depth_sm, true_depth) / 30
+                    pred_fgr_sm, pred_err_sm, true_pha, true_fgr)
+
+                depth_loss = LOSS.compute_depth_loss(pred_depth_sm, true_depth)
+                loss = matting_loss + depth_loss / 30
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -269,6 +292,8 @@ def train_worker(rank, addr, port):
             if rank == 0:
                 if (i + 1) % args.log_train_loss_interval == 0:
                     writer.add_scalar('loss', loss, step)
+                    writer.add_scalar('matting loss', matting_loss, step)
+                    writer.add_scalar('depth loss', depth_loss, step)
 
                 if (i + 1) % args.log_train_images_interval == 0:
                     writer.add_image('train_pred_pha',
